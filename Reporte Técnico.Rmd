@@ -1,0 +1,1615 @@
+---
+title: "__Análisis y Predicción: Accidentalidad en Medellín, Colombia__"
+subtitle: __Universidad Nacional de Colombia - Especialización en Analítica__
+author: 
+- name: Santiago Giraldo Ardila
+  email: sagiraldoar@unal.edu.co
+- name: Cristian Camilo Restrepo Quiroz
+  email: crestrepoq@unal.edu.co
+- name: Tania Marcela Roldán Arroyave
+  email: troldan@unal.edu.co
+- name: Juan Camilo Palacio Aguiar
+  email: jupalacioag@unal.edu.co
+  
+linkcolor: blue
+urlcolor: blue
+
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warnings = FALSE)
+```
+<br>
+<br> 
+  
+<div style="text-align: justify"> 
+En el mundo, los accidentes de tránsito son considerados como un problema social; entre otros motivos, por las grandes perdidas económicas y la afectación a la salud pública, medida como las consecuencias físicas y mentales de los afectados<a href="#note1" id="note1ref"><sup>1</sup></a>. En Medellín, durante el primer semestre del año 2020 se presentaron 81 muertes y 9.260 lesiones por accidentes de tránsito. Aunque se destaca una disminución en comparación con años anteriores<a href="#note1" id="note1ref"><sup>2</sup></a>. En este reporte se expone un análisis sobre los accidentes de tránsito en la cuidad de Medellín. Además se emplean técnicas de predicción y clustering vistas en el curso de Analítica Predictiva de la Universidad Nacional de Colombia Sede Medellín.
+</div>
+
+<br>
+
+<center style="color: STEELBLUE;font-size: 280%"> Introducción </center>
+<br>
+<div style="text-align: justify"> 
+"Un accidente de tráfico o tránsito, colisión/incidente/siniestro vial o automovilístico, entre otros términos, es un suceso que ocurre generalmente cuando un vehículo colisiona contra uno o más sectores de la vialidad u otra obstrucción estacionaria como un poste, un edificio, un árbol, entre otros"<a href="#note1" id="note1ref"><sup>3</sup></a>. Los accidentes de tránsito se originan generalmente por condiciones del vehículo, condiciones ambientales y en gran medida por factores humanos. Además, en Colombia estos últimos se caracterizan según el tipo de accidente de acuerdo con El Informe Policial de Accidentes de Tránsito como se detalla a continuación:
+
+**Choque**
+El impacto de un vehículo en movimiento contra otro u otros vehículos, estén o no en movimiento o contra un objeto fijo.
+
+**Atropellamiento**
+Es el accidente donde un peatón es inicialmente impactado por un vehículo; esta clase de accidente es una de las más presentadas dentro del área urbana y la que registra el mayor índice de mortalidad con respecto a las otras clases de accidentes.
+
+**Volcamiento**
+Es el accidente en el cual las llantas de un vehículo dejan de estar en contacto con la superficie del suelo, por causas ajenas a la voluntad del conductor. Algunos de los volcamientos son producto de la maniobra que realizan los conductores antes de iniciar una frenada.
+
+**Caída de ocupante**
+Esta se presenta cuando el ocupante pierde el equilibrio, ya sea al subir o bajar del vehículo en movimiento, precipitándose hacia la vía, sin que ello sea generado por choque o volcamiento.
+
+**Incendio**
+Se produce como consecuencia de intervenciones mecánicas mal efectuadas, fallas eléctricas o mecánicas o similares, dando lugar a una conflagración o al incendio del vehículo, sin que ello sea consecuencia de un accidente previo.
+
+**Otros**
+Son los accidentes que no se enmarcan dentro de las clases descritas, tales como el evento en el cual, con la llanta de un vehículo es expulsada una piedra u objeto, generando daños a otros vehículos o lesiones a las personas y otras situaciones diferentes a las expuestas en la clasificación anterior.
+
+
+En este reporte técnico se presenta, en primer lugar, un análisis exploratorio de los datos que permitirá encontrar patrones de comportamiento que se emplearán en las etapas de predicción y clustering. Posteriormente se presenta la estrategia de modelación para la predicción de la accidentalidad por tipo de accidente a nivel semanal, mensual y diario, con sus respectivos resultados; y por último se presenta el agrupamiento de los barrios de Medellín de acuerdo con sus niveles de accidentalidad.
+<br>
+
+El insumo para la realización de este trabajo son los [datos abiertos de movilidad](https://geomedellin-m-medellin.opendata.arcgis.com/search?tags=movilidad)  publicados por la Alcaldía de Medellín, en los informes de [accidentalidad Georeferenciada](https://www.medellin.gov.co/geomedellin/) que contienen los accidentes de tránsito registrados por la Secretaría de Movilidad de la Alcaldía de Medellín, en el periodo comprendido entre enero de 2014 y diciembre del año 2018.
+</div>
+<br>
+
+<center style="color: STEELBLUE;font-size: 280%"> Análisis Exploratorio </center>
+<br>
+
+```{r include=FALSE}
+#se realiza la carga de todas la librerías necesarias para desarrollar el trabajo.
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(kableExtra)
+library(faraway)
+library(gridExtra)
+library(leaflet)
+library(purrr)
+library(rgdal)
+library(pander)
+library(fastDummies)
+library(glmnet)
+library(randomForest)
+library(glmnet)
+library(e1071)
+```
+<div style="text-align: justify"> 
+Como primer paso se realiza la carga de los datos, los cuales se encuentran en un dataset diferente para cada año y posteriomente se concatenan para tener centralizada la información y facilitar todos los análisis de este ejercicio. Además, se realiza la limpieza de los datos para los formatos de fecha y los tipos de datos strings con el fin de realizar la homologación de las diferentes clases de accidentes y los nombres de los barrios que serán variables de alta relevancia en el desarrollo del trabajo 
+</div>
+
+```{r}
+# se realiza la carga de cada uno de los dataframes y la concatenación  
+
+setwd("C:\\Users\\sga96\\OneDrive\\Accidentalidad-Medellin\\Datasets")
+  df_2014=read.csv("Accidentalidad_georreferenciada_2014.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2015=read.csv("Accidentalidad_georreferenciada_2015.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2016=read.csv("Accidentalidad_georreferenciada_2016.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2017=read.csv("Accidentalidad_georreferenciada_2017.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2018=read.csv("Accidentalidad_georreferenciada_2018.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_inicial = rbind(df_2014,df_2015,df_2016,df_2017,df_2018)
+  
+```
+
+```{r}
+# se realiza la limpieza del formato fecha y la homologación de la variable clase
+
+df <- separate(data = df_inicial, col = FECHA, into = c("FECHA", "Sobrante"), sep = " ")
+df$FECHA <- as.Date(df$FECHA, format = "%Y/%m/%d")
+df$CLASE[df$CLASE=='Choque'] <- "Choque" 
+df$CLASE[df$CLASE=='Volcamiento'] <- "Otro" 
+df$CLASE[df$CLASE=='Atropello'] <- "Atropello" 
+df$CLASE[df$CLASE=='Caída de Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Caida Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Caida de Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Caída Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Choque y Atropello'] <- "Choque" 
+df$CLASE[df$CLASE=='otro'] <- "Otro"
+df$CLASE[df$CLASE=='Incendio'] <- "Otro"
+df$CLASE[df$CLASE==""] <- "Otro"
+
+#se crea una copia para el data frame de la predicción
+
+df_p <- df
+df_p$GRAVEDAD[df_p$GRAVEDAD=='MUERTO'] <- "Persona involucrada" 
+df_p$GRAVEDAD[df_p$GRAVEDAD=='HERIDO'] <- "Persona involucrada"
+df_p$GRAVEDAD[df_p$GRAVEDAD=='SOLO DAÑOS'] <- "Solo daños"
+```
+
+```{r}
+#se crea la tabla con todas las variables del dataframe
+
+kable(head(df)) %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  scroll_box(width = "100%")
+```
+<br>
+<div style="text-align: justify"> 
+Es necesario también, elegir sólo las variables que se consideran relevantes para el desarrollo del trabajo en las etapas de predicción y agrupamiento. A continuación, se realiza una breve descripción de las variables iniciales
+</div>
+
+- **FECHA**: Fecha en formato AAAA-MM-DD
+- **PERIODO**: Entero que corresponde la año respectivo
+- **MES**: Entero que corresponde al mes respectivo
+- **DIA**: Entero que corresponde al día respectivo
+- **DIA_NOMBRE**: Es una cadena de texto que representa el nombre del día
+- **CLASE**: Es una agrupación de los tipos de accidente creados para la modelación (Choque, Atropello y Otros)
+- **BARRIO**: Corresponde al nombre del barrio donde ocurrió el accidente
+- **GRAVEDAD**: Identifica si el accidente tuvo muertos, heridos o sólo daños materiales 
+- **NRO_ACCIDENTES**: Es el número de accidentes presentados en la ciudad para la fecha en cuestión
+
+```{r}
+# se seleccionan la variables iniciales con las cuales se desarrollara el trabajo
+
+df <-  df %>%
+  group_by(FECHA,PERIODO,MES,DIA,DIA_NOMBRE,CLASE,BARRIO,GRAVEDAD,Y,X.U.FEFF.X) %>%
+  summarize(NRO_ACCIDENTES=n())
+```
+
+```{r}
+#se muestra la tabla con la selección de variables 
+
+kable(head(df)) %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  scroll_box(width = "100%")
+```
+<br>
+<div style="text-align: justify"> 
+Después de realizar la limpieza, homologación y selección de variables iniciales se realiza el análisis descriptivo para conocer de una mejor manera las características del conjunto de datos y realizar descubrimientos iniciales para soportar la modelación posterior.
+</div>
+
+```{r}
+pander(summary(df))
+```
+
+
+<br>
+<div style="color: STEELBLUE;font-size: 150%"> Análisis de Temporalidad </div>
+<br>
+
+```{r}
+#Se realiza un gráfico de barras para los años analizados 
+
+ggplot(df, aes(x=PERIODO, y=NRO_ACCIDENTES)) + 
+  geom_bar(stat = "identity", color ="LIGHTSTEELBLUE", width = 0.5) + ylim(0, 60000) +xlab('Año') + ylab('Número Accidentes')+ ggtitle('Accidentes por Año')
+
+```
+<br>
+<div style="text-align: justify"> 
+Como se puede observar en la gráfica anterior, se evidencia inicialmente una tendencia creciente desde el año 2014 hasta el 2016 donde se alcanza el pico máximo de accidentes, sin embargo a partir de allí se observa una leve reducción en los mismos tantos para el año 2017 como 2018. Esta situación debe analizarse con cuidado en la modelación debido a que al no existir una tendencia marcada, y sobre todo teniendo en cuenta que los datos del año 2018 serán usados para validar, se podría presentar problemas de sobreentrenamiento, es decir que el modelo tendría buena capacidad predictiva en el conjunto de entrenamiento, pero muy poca en el conjunto de validación.
+<br>
+
+Continuando con el análisis de temporalidad se procede a realizar la revisión de la importancia del mes en que ocurren los accidentes, para identificar posibles patrones.
+
+
+
+```{r}
+ggplot(df, aes(x=factor(MES), y=NRO_ACCIDENTES)) + 
+  geom_bar(stat = "identity", color ="LIGHTSTEELBLUE")+xlab('Mes') + ylab('Número Accidentes')+ ggtitle('Accidentes por Mes')
+```
+<br>
+
+De la gráfica anterior se resalta principalmente la baja cantidad de accidentes que presenta el mes de enero en comparación los demás meses, esto debido probablemente a que gran parte de la población se encuentra en vacaciones por estas epocas tanto los estudiantes como los trabajadores, lo que reduce los índices de accidentalidad. En general se evidencia que algunos meses como es el caso de Agosto presentan aldos índices de accidentalidad en comparación de los demás, por lo que a primera vista esta variable podría ser relevante en la modelación.
+
+Continuando en análisis de la temporalidad, se realizar un análisis por día de la semana, para evidenciar si existe alguna relación entre la accidentalidad y los días de la semana 
+
+```{r}
+ggplot(df, aes(x=DIA_NOMBRE, y=NRO_ACCIDENTES)) + 
+  geom_bar(stat = "identity", color ="LIGHTSTEELBLUE")+xlab('Nombre Día Semana') + ylab('Número Accidentes')+ ggtitle('Accidentes por Día de la semana')
+```
+
+Para finalizar el análisis de la temporalidad, se crea el siguiente histograma con le objetivo de validar si existe algún rango de fechas dentro del mes que muestre un comportamiento anormal de aciddentalidad
+
+```{r}
+ggplot(df_inicial, aes(x=DIA))+
+  geom_histogram(col="darkgray", fill='LIGHTSTEELBLUE')+ ggtitle('Histograma por día')
+```
+<br>
+
+Observando el histograma generado, no se evidencia una diferencia clara en algún momento del mes en particular. A priori no parece ser una variable importante, sin embargo si podría explicar pequeñas variaciones en días particulares.
+
+.
+
+<div style="color: STEELBLUE;font-size: 150%"> Análisis Clase Accidente </div>
+<br>
+Teniendo en cuenta la agrupación mencionada anteriormente en cuanto a los tipos de accidentes, se presentan a continuación los boxplot para cada una de estas:
+
+```{r}
+pl <- ggplot(df, aes(x=factor(CLASE),y=NRO_ACCIDENTES))
+pl + geom_boxplot() + ggtitle('Análisis por Clase de Accidente') + xlab('Clase de Accidente') + ylab('Número Accidentes')
+```
+
+<br>
+Analizando el gráfico anterior, salta a la vista que los choques son los tipos de accidentes más comunes en la ciudad, teniendo además valores de mayor dispersión, por otro lado, los atropellos se presentan con mucha menor frecuencia y presenta muchos menos outliers que los otros tipos de accidentes.
+
+</div>
+
+<div style="color: STEELBLUE;font-size: 150%"> Análisis Gravedad Accidente </div>
+<br>
+
+
+```{r}
+ggplot(df, aes(x=GRAVEDAD, y=NRO_ACCIDENTES)) + 
+  geom_bar(stat = "identity", color ="LIGHTSTEELBLUE")+xlab('Tipo de gravedad') + ylab('Número Accidentes')+ ggtitle('Accidentes por Gravedad')
+```
+<br>
+<div style="text-align: justify">
+Con respecto a la gravedad de los accidentes, se puede inferir que no es muy común que un accidente en Medellín involucre una persona muerta, mientras que los accidentes que involucran heridos son los más frecuentes. Las afectaciones materiales y económicas se encuentran en un punto intermedio en relación con los otros dos tipos de gravedad en los accidentes.
+<br>
+
+```{r}
+kable(head(df)) %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  scroll_box(width = "100%")
+```
+
+
+<br>
+<center style="color: STEELBLUE;font-size: 280%"> Modelamiento y Predicción </center>
+<br>
+
+Para cumplir el primer objetivo de este proyecto, se buscará predecir la accidentalidad para cada tipo de clase en diferentes temporalidades (diaria, semanal y mensual) Utilizando diferentes técnicas estadistícas y algoritmos de machine learning para la selección de un modelo óptimo teniendo en cuenta la información disponible. Para iniciar, se entrenarán los modelos para predeccir el tipo de accidentalidad (sólo daños materiales o Accidente con persona) y posteriormente se entrarán los modelos que ayudarán con la predicción de acuerdo a las temporalidades mencionadas anteriormente. 
+
+Por otro lado, del análisis exploratorio anterior se puede concluir que es necesaria la inclusión de variables adicionales a las elegidas inicialmente, con el objetivo de tener mayores herramientas que permitan una mejor capacidad de predicción de los modelos que se utilizarán más adelante. Se crearán una serie de variables que en primera instancia podrían tener en mayor o menor medida influencia en el número de accidentes que se producen día a día, como se detalla a continuación:
+
+- **ANIO_REFERENCIA**: Se toma el 2014 como año de referencia y a cada año se le resta este valor, para reducir la cardinalidad de los datos y evitar problemas en los modelos, se toma como variable continua para tener la posibilidad de predecir futuros años.
+- **SEMANA**: se obtiene el número de semana de la fecha.
+- **LABORAL**: 1 Si el día es laboral y 0 si no lo es (SÁBADO,DOMINGO Y FESTIVO)
+- **FESTIVO**: 1 Si el día es FESTIVO y 0 si no lo es.
+- **HALLOWEEN**: Se celebra el 31 de octubre de cada año, y muchas personas y niños salen en las horas de la noche a pedir dulces lo que puede aumentar el riesgo de accidentes.
+- **NAVIDAD** Día que se celebra la navidad, 25 de diciembre.
+- **FIN_DE_AÑO**: Ultimo día del año que muchas personas no trabajan y hay mucho movimiento en la ciudad.
+- **FERIA_DE_FLORES**: Evento festivo tradicional en la ciudad que se celebra en Agosto.
+- **SEMANA_SANTA**: Es la semana que se celebran ceremonias religiosas, usualmente en el mes de abril.
+- **FIESTA_DEL_TAMARINDO**: Es una fiesta, que se celebra en Santafe de Antioquia, lugar donde muchas personas de la ciudad tienen propiedas.
+- **FIESTA_DE_LOS_ZOCALOS**: Fiesta en guatape en donde muchas personas se pueden movilizar.
+- **DIA_DE_LA_MADRE**: Es el segundo Domingo de Mayo, es un día que generalmente tiene altos niveles de accidentalidad y homicidios.
+- **DIA_SIN_CARRO**: Es un día al año en donde no es permitido movilizarse en transporte particular, lo que se esperaría que se reduzca la accidentalidad.
+- **MARATÓN_DE_LAS_FLORES**: Es una maraton que se corre en la ciudad de medellin, en donde se cierra muchas vías de la ciudad, lo que puede reducir la accidentalidad.
+
+Por otro lado, se realiza un agrupamiento de los accidentes de acuerdo con su gravedad, es decir, si involucra o no personas; uniendo las categorías de gravedad 'Herido" y 'Muerto'. 
+
+Para la evaluación de los modelos, se dividirá el conjunto de datos desde el año 2014 al 2017 en  entrenamiento y 2018 como validación. Adicionalmente se utilizará le medida del error cuadrático medio (MSE) para la comparación de la predicción de los modelos, Sin embargo también se tendrán en cuenta otras medidas para la selección del modelo, como el Número de variables, el R2 ajustado y el AIC.
+
+```{r}
+#Se se crea un nuevo dataframe
+
+df_p <-  df_p %>%
+  group_by(FECHA,PERIODO,MES,DIA,DIA_NOMBRE,GRAVEDAD) %>%
+  summarize(NRO_ACCIDENTES=n())
+
+#se crea la variable año de referencia
+df_p$ANIO_REFERENCIA <- df_p$PERIODO -2014
+
+#Se agrega variable semana
+df_p$SEMANA <- format(df_p$FECHA,"%V")
+
+# Se agregan  variable de FESTIVO al modelo
+setwd("C:\\Users\\sga96/OneDrive\\Accidentalidad-Medellin\\Datasets")
+festivos=read.csv("Festivos.csv")
+festivos$FECHA <- as.Date(festivos$FECHA, format = "%Y-%m-%d")
+df_p <- merge(x = df_p, y = festivos, by = "FECHA", all.x = TRUE)
+  
+# Se agrega variable LABORAL al modelo
+laborales=c('LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES')
+df_p$LABORAL=ifelse(df_p$DIA_NOMBRE %in% laborales,1,0)
+df_p$LABORAL=ifelse(df_p$FESTIVO == 1,0,df_p$LABORAL)
+
+#Se agregan fechas especiales
+df_fechas_especiales=read.csv("Fechas especiales.csv",strip.white=TRUE,
+                                      encoding = "UTF-8")
+df_fechas_especiales$FECHA <- as.Date(df_fechas_especiales$FECHA, format = "%Y-%m-%d")
+df_p <- merge(x = df_p, y = df_fechas_especiales, by = "FECHA", all.x = TRUE)
+
+```
+
+
+<br>
+<div style="color: STEELBLUE;font-size: 150%"> Sólo Daños Materiales </div>
+<br>
+
+Para desarrollar el modelamiento de está variable es necesario realizar una homologación del tipo de accidente de acuerdo con su gravedad, es decir, si involucra o no personas. Además, generarán las variables dummies necesarias para la construcción del modelo, y se evalua para el tipo de accidente "Solo Daños Materiales" que corresponde al tipos de gravedad 'SOLO DAÑOS'.
+
+```{r}
+#Se seleccionan sólo el tipo de accidentes que involucran personas y se crean las variables dummies
+df_psd <- df_p[df_p$GRAVEDAD== "Solo daños",]
+df_psd$GRAVEDAD <- NULL
+df_psd$DIA <- sprintf("%02d", df_psd$DIA)
+df_psd$MES <- sprintf("%02d", df_psd$MES)
+
+
+df_modelo_pre <- dummy_cols(df_psd, select_columns = c('MES','SEMANA','DIA','DIA_NOMBRE'))
+df_modelo_pre$MES <- NULL
+df_modelo_pre$SEMANA <- NULL
+df_modelo_pre$DIA <- NULL
+df_modelo_pre$DIA_NOMBRE <- NULL
+```
+
+```{r}
+# se divide el conjunto de datos en entrenamiento y validación
+train <- df_modelo_pre[df_modelo_pre$PERIODO < 2018,]
+validation<- df_modelo_pre[df_modelo_pre$PERIODO == 2018,]
+```
+
+# Regresión lineal
+
+```{r}
+modelo_lm <- lm(NRO_ACCIDENTES~.-FECHA-PERIODO-MES_01-SEMANA_01-DIA_01-DIA_NOMBRE_LUNES,data=train)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+Analizando los resultados de la regresión analizada, según el R2 ajustado, el 69% de la variación en los accidentes con solo daños materiales esta explicado por las variables utilizadas. Adicionalmente el valor P del estadistico F al ser menor al 5% muestra que al menos una de las variables utilizadas tiene la capacidad de explicar una parte significativa de la variación en los accidentes con solo daños materiales .Sin embargo este modelo presenta un inconveniente bastante grande, ya que la desviación entre el MSE de entrenamiento y validación es de aproximadamente del 39%, lo que da evidencias clara de un sobreentrenamiento en el modelo.
+
+A continuación se muestra la grafica de las predicciones vs los valores observados para obtener información adicional
+Como primer modelo se utilizará una regresión lineal con todas las variables creadas para tener una linea base sobre la cual comparar y seleccionar variables.
+
+```{r}
+plot(pred,validation$NRO_ACCIDENTES,xlab="Predichos",ylab="Observados",las=1)
+abline(a=0,b=1,lwd=2)
+grid()
+```
+
+En el gráfico de dispersión se observa, que el modelo en niveles bajos de accidentalidad tiene mayor capacidad de predición que para niveles altos.
+
+El tema del sobre entrenamiento puede ser un problema muy grave para el modelo, ya que esto quiere decir que el modelo esta aprendiendo de memoria los datos, pero no tiene una buena capacidad de generalización. Para afrontar este problema a continuación se realizará una serie de técnicas de selección de variables y regularización para intentar mejorar esta situación.
+
+En primera instancia se utilizará un stepwise para apoyar en la selección de las variables.
+
+```{r}
+modelo_lm_step<-step(modelo_lm,direction = "backward",trace=FALSE)
+summary(modelo_lm_step)
+cat(" AIC:",AIC(modelo_lm_step))
+pred=predict(modelo_lm_step,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_step,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+el MSE de validación no presenta mejoría alguna, adicionalmente el sobre entrenamiento sigue existiendo con una desviación del 37%, es decir este proceso solo disminuye gradualmente el sobre entrenamiento, por lo que esta alternativa no es viable para el modelo.
+
+Se trata de aplicar un método de regularización para revisar si se reduce el sobreentrenamiento del modelo, en este caso se aplicará una regresión lasso, ya que esta tiene la capacidad de penalizar parametros que podrían ser la causa del sobre entrenamiento, e incluso tiene por si mismo un metodo de selección de variables.
+
+```{r}
+X <-model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+    SEMANA_01 - DIA_01 - DIA_NOMBRE_LUNES,train)[,-1]
+y <- train$NRO_ACCIDENTES
+grid<-10^seq(10,-4,length=100)
+modelo_lasso<-cv.glmnet(X,y,alpha=1,lambda=grid) # alpha=1 es lasso
+lambda_opt<-modelo_lasso$lambda.min
+modelo_lasso<-glmnet(X,y,alpha=1,lambda = lambda_opt)
+pred<-predict(modelo_lasso,model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+    SEMANA_01 - DIA_01 - DIA_NOMBRE_LUNES,train)[,-1])
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred<-predict(modelo_lasso,model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+    SEMANA_01 - DIA_01 - DIA_NOMBRE_LUNES,validation)[,-1])
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+Como se puede observar en la parte superior, el modelo sigue sin desempeñarse correctamente aún con la regularización de las variables y por el contrario ejecuta niveles de MSE con un sobreentrenamiento superior del 38%.
+
+Se intenta probar un método de diferente naturaleza como es el caso de un bosque aleatorio para analizar su comportamiento y evaluar sus resultados, para ver si presenta alguna mejoría en las medidas y el sobre entrenamiento
+
+```{r}
+rf_model <- randomForest(NRO_ACCIDENTES~.-FECHA-PERIODO,data=train,ntree=2000)
+pred=predict(rf_model,train)
+cat(" MSE_t",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict( rf_model,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+El método del bosque muestra una mejoría muy grande en el MSE de entrenamiento, sin embargo el MSE de validación no presenta cambios significativos, por lo que no se soluciona el problema de sobreentrenamiento, de hecho por el contrario, el sobreentrenamiento se encuentra aun mas marcado con una superior al 380%.
+
+Analizando todos los métodos realizados anteriormente, se evidencia que los modelos se están ajustando demasiado al conjunto de entrenamiento pero no están teniendo  capacidad de generalizar las predicciones en el  conjunto de validación, buscando alternativas para solucionar este problema, se evidencia que la variable semana está tomando demasiada importancia o significancia para los métodos, teniendo en cuenta tanto los valores p de las regresiones lineales iniciales, como la selección de variables realizadas por el método stepwise, adicionalmente genera muchisimas variables dummyy esto puede generar problemas en los modelos debido a que genera una matriz muy dispersa. Por esta razón se decide eliminar completamente esta variable y revisar los resultados.
+
+```{r}
+#se elimina la variable semana y año 
+df_modelo_pre <- dummy_cols(df_psd, select_columns = c('MES','DIA','DIA_NOMBRE'))
+df_modelo_pre$MES <- NULL
+df_modelo_pre$SEMANA <- NULL
+df_modelo_pre$DIA <- NULL
+df_modelo_pre$DIA_NOMBRE <- NULL
+```
+
+```{r}
+train <- df_modelo_pre[df_modelo_pre$PERIODO < 2018,]
+validation<- df_modelo_pre[df_modelo_pre$PERIODO == 2018,]
+```
+
+De nuevo se ajusta un modelo de regresión lineal con todas las variables con excepción de la semana, para analizar el comportamiento.
+```{r}
+# se genera el modelo de regresión lineal, y como una variable categorica se puede representar como k-1 variables dummies, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.-FECHA-PERIODO-MES_01-DIA_01-DIA_NOMBRE_LUNES ,data=train)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+Como se puede observar en las metricas del error cuadratico medio, la desviación en el resultado entre el MSE del conjunto validación y el de prueba se redujo considerablemente, ya que ahora es del 22% , lo que implica que la variable semana estaba causando de alguna manera un sobreentrenamiento en el modelo. Sin embargo la desviación sigue siendo superior al 15%, por lo que el modelo a pesar de la mejora sigue estando sobreentrenado, adicionalmente se observa que el MSE en validación se redujo minimamnete.
+
+Basandonos en el analisis exploratorio inicial, cuando se analizaba accidentes por año, se observaba que para los primeros años se producia una tendencia alcista en el número de accidentes, pero en los dos ultimos años esta tendencia cambiaba, incluyendo el año 2018 el cual es nuestro año de validación. Esta situación puede ser la causante del sobre entrenamiento del modelo, por lo cual se procede a eliminarse y calcular de nuevo el modelo base.
+
+
+```{r}
+#se elimina la variable ANIO_REFERENCIA
+df_modelo_pre$ANIO_REFERENCIA <- NULL
+#se divide el conjunto de datos en entrenamiento y validación
+train <- df_modelo_pre[df_modelo_pre$PERIODO < 2018,]
+validation<- df_modelo_pre[df_modelo_pre$PERIODO == 2018,]
+```
+
+```{r}
+# se genera el modelo de regresión linea, y como una variable categorica se puede representar como k-1 variables dummues, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.-FECHA-PERIODO-MES_01-DIA_01-DIA_NOMBRE_LUNES ,data=train)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+La diferencia de MSE entre el conjunto de entrenamiento y validación bajó al 18%, además presenta el mejor MSE de validación obtenido hasta el momento, lo que es un indicativo de que la variable año estaba provocando el sobreentrenamiento del modelo. según el R2 ajustado, el 67% de la variación en los accidentes con solo daños materiales está explicado por las variables utilizadas. Adicionalmente el valor P del estadistico F al ser menor al 5% muestra que al menos una de las variables utilizadas tiene la capacidad de explicar una parte significativa de la variación en los accidentes con solo daños materiales.
+
+Sin embargo al persistir el sobre entrenamiento  y teniendo en cuenta que la mayoría de estos son mayores al 5% (variables no son significativas para el modelo), se debe realizar una selección de variables para tener un modelo más sencillo pero con gran capacidad predictiva, por lo anterior se parte de este modelo base sin año de referencia y sin semana, y se realiza de nuevo una selección de variables utilizando el stepwise
+
+
+```{r}
+modelo_lm_step<-step(modelo_lm,direction = "backward",trace=FALSE)
+summary(modelo_lm_step)
+cat(" AIC:",AIC(modelo_lm_step))
+pred=predict(modelo_lm_step,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_step,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+Se realiza de nuevo la regresión lineal con las variables elegidas:
+
+Este modelo de regresión lineal con selección de variables mejora considerablemente el AIC pues pasa de 10918.18 a 10887.7 lo que es muy positivo porque este criterio tiene en cuenta tanto la capacidad de predicción como el número de variables,aunque se genera un sobrentrenamiento del 16%, el cual aunque se acerca al valor objetivo del 15% aún se deben realizar ajustes, para solucionar el inconveniente
+
+Se analiza la posibilidad de una transformación logaritmica  para ver si se  mejora el  comportamiento en los datos
+
+```{r}
+hist(df_modelo_pre$NRO_ACCIDENTES)
+```
+
+Se observa el según la gráfica anterior, que la gráfica tiene dos picos, uno mas pequeño a la izquierda, y uno que sobresale a la derecha.
+
+
+```{r}
+hist(log(df_modelo_pre$NRO_ACCIDENTES))
+```
+Con la transformación logaritmica, se ve que el pico de la izquierda fue reducido, sin embargo esto provoca una cola izquierda, que podría afectar la predicción. A continuación se procede a analizar este caso
+
+
+```{r}
+modelo_lm_log <- lm(log(NRO_ACCIDENTES)~. -FECHA-PERIODO-MES_01-DIA_01-DIA_NOMBRE_LUNES ,data=train)
+summary(modelo_lm_log)
+cat("AIC_",AIC(modelo_lm_log))
+pred=predict(modelo_lm_log,train)
+cat(" MSE_t:",mean((exp(pred)-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_log,validation)
+cat(" MSE_v:",mean((exp(pred)-validation$NRO_ACCIDENTES)^2))
+```
+Los resultados son inicialmente muy similares sin la selección de variables, y aunque su R2 mejora considerablemente a 74% y La desviación entre el MSE de entrenamiento y validación sigue siendo mayor al 15%
+
+```{r}
+modelo_lm_log_step<-step(modelo_lm_log,direction = "backward",trace=FALSE)
+summary(modelo_lm_log_step)
+cat("AIC:",AIC(modelo_lm_log_step))
+pred=predict(modelo_lm_log_step,train)
+cat(" MSE_t",mean((exp(pred)-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_log_step,validation)
+cat(" MSE_v:",mean((exp(pred)-validation$NRO_ACCIDENTES)^2))
+```
+
+La selección de variables para el caso de esta transformación no parece mejorar los resultados, de hecho el MSE se incrementa ligeramente y el modelo sigue presentando sobre entrenamiento.
+
+Analizando otras posibilidades se intenta en primera instancia modelar con una maquina de soporte vectorial, con un kernel radial para evaluar sus resultados.
+
+
+```{r}
+#Regression with SVM
+modelsvm = svm(NRO_ACCIDENTES~.-FECHA-PERIODO,train,kernel="radial")
+
+#Predict using SVM regression
+pred = predict(modelsvm, train)
+mean((pred-train$NRO_ACCIDENTES)^2)
+pred = predict(modelsvm, validation)
+mean((pred-validation$NRO_ACCIDENTES)^2)
+```
+
+La maquina de soporte presenta un comportamiento similar al árbol, con altos niveles de sobre entrenamiento que superan el 123% en este caso, lo que indica que dicho modelo no tiene capacidad de generalización para estos datos
+
+se intenta realizar un analisis de sensibilidad con un kernel lineal para validar que impacto tiene sobre los resultados.
+
+```{r}
+#Regression with SVM
+modelsvm = svm(NRO_ACCIDENTES~.-FECHA-PERIODO,train,kernel="linear")
+
+#Predict using SVM regression
+pred = predict(modelsvm, train)
+mean((pred-train$NRO_ACCIDENTES)^2)
+pred = predict(modelsvm, validation)
+mean((pred-validation$NRO_ACCIDENTES)^2)
+```
+La modificación del tipo de kernel a lineal, reduce considerablemente la desviación del MSE entre entrenamiento y validación con respecto al kernel radial, obteniendose un valor cercano al 20%, sin embargo no cumple con la métrica establecida la cual dicta, que este valor debe ser menor al 15%
+
+Debido a que la maquina de soporte vectorial, escala
+muy bien con el numero de observaciones, pero presenta problemas a medida que el número de variables aumenta, se aplica utilizando las variables elegidas en el stepwise calculado anteriormente.
+
+
+```{r}
+#Regression with SVM
+modelsvm = svm(formula(modelo_lm_step),train,kernel="linear")
+
+#Predict using SVM regression
+pred = predict(modelsvm, train)
+mean((pred-train$NRO_ACCIDENTES)^2)
+pred = predict(modelsvm, validation)
+mean((pred-validation$NRO_ACCIDENTES)^2)
+
+```
+
+La selección de variables mejora para la maquina de soporte tanto el MSE DE validació, como el nivel de sobreentrenamiento, obteniendo una desviación cercana al 16%, sin embargo se debe descargar esta aproximación debido a que sigue siendo superior la 15%
+
+Se intenta utilizar un bosque aleatorio para observar el poder de la predicción.
+
+
+```{r}
+rf_model <- randomForest(NRO_ACCIDENTES~.-FECHA-PERIODO,data=train,ntree=2000)
+rf_model$importance
+pred=predict(rf_model,train)
+cat(" MSE_t",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(rf_model,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+al arbol aunque sigue siendo el modelo  tiene el mejor MSE en entrenamiento, la diferencia con el conjunto de validación sigue siendo demasiado grande (250% aproximadamente), adicionalmente en validación su MSE no mejora con respecto a los demás modelos, por lo que no se considera una opción viable.
+
+Se intenta una ultima técnica de selección de variables, en donde se utiliza las variables más importantes de acuerdo a la información del bosque aleatorio (mayor a 5.000 deIncNodePurity), aprovechando que este método en su construcción permite conocer la importancia que le da a cada variable.
+
+
+```{r}
+df_modelo_importancia_rf=df_modelo_pre[,c('FECHA','PERIODO','FESTIVO','LABORAL','SEMANA_SANTA','MES_01','DIA_NOMBRE_DOMINGO','DIA_NOMBRE_SÁBADO','DIA_NOMBRE_VIERNES','NRO_ACCIDENTES' )]
+```
+
+Se organiza el conjunto de entrenamiento y validación
+```{r}
+train <- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO < 2018,]
+validation<- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO == 2018,]
+```
+
+Se realiza el modelo de regresión lineal con las variables seleccionadas de acuerdo al árbol
+
+```{r}
+# se genera el modelo de regresión lineal, y como una variable categorica se puede representar como k-1 variables dummies, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.-FECHA-PERIODO,data=train)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+Este modelo nos elimina el sobre entrenamiento presentado en los anteriores metodos de predicción ya que la desviación presentada es del 14,7%, por lo que aunque el MSE de validación es un poco peor que aquellos analizados con otros modelos (113) cumple el criterio principal se no sobrepasar el 15% de entrenamiento.
+
+Por ultimo se revisa el modelo con support vector machines con la variables seleccionadas por el bosque aleatorio para revisar si existe alguna mejora.
+
+```{r}
+#Regression with SVM
+model_svm = svm(NRO_ACCIDENTES~.-FECHA-PERIODO,train,kernel="linear")
+
+#Predict using SVM regression
+pred=predict(model_svm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(model_svm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+Aplicar selección de variables con base al árbol elimino totalmente el sobre entrenameinto que se presentaba, pero al ingresar dichas variables al modelo support vector machines el MSE de validación esta por encima de la regresión lineal.
+
+### Selección de modelo
+
+Después de analizar multiples modelos, revisar problemas de sobrentrenamiento y aplicar diferentes metodos de selección de variables y transformaciones, y utilizando principalmente el MSE de validación como métrica para elección del mejor modelo, teniendo en cuenta también el número de variables utilizadas. El modelo de regresión lineal, eliminando inicialmente las variables relacionadas con el año y el mes y posteriormente haciendo una selección de variables con un arbol  tiene la mejor capacidad predictiva en el conjunto de entrenamiento, y su R2 se interpeta como que el 64% de la variación en el número de accidentes es explicado por las variables utilizadas, Adicionalmente tiene un menor número de variables en comparación con otros modelos lo que implica que es más parsimonioso y sencillo sin sacrificar capacidad predictiva.
+<br>
+
+
+```{r}
+saveRDS(modelo_lm, "./modelo_semanal_daños.rds")
+```
+
+<div style="color: STEELBLUE;font-size: 150%"> Periodicidad Semanal - Sólo Daños </div>
+<br>
+
+Después de seleccionar el modelo más adecuado para la predicción de los accidentes con tipo = Solo Daños, se calculan los modelo para las diferentes periodicidades mencionadas anteriormente. En este caso para se calcula la periodicidad semanal.
+```{r}
+df_semana <-  df_psd %>%
+  group_by(PERIODO,ANIO_REFERENCIA,SEMANA) %>%
+  summarize(NRO_ACCIDENTES= sum(NRO_ACCIDENTES),Total_festivos = sum(FESTIVO), Total_laborales= sum(LABORAL))
+```
+
+```{r}
+df_semana <- dummy_cols(df_semana, select_columns = c('SEMANA'))
+df_semana$SEMANA <- NULL
+
+media_fest_psd <- mean(df_semana$Total_festivos)
+media_laboral_psd <- mean(df_semana$Total_laborales)
+media_anio_ref_psd <- mean(df_semana$ANIO_REFERENCIA)
+
+sd_fest_psd <- sd(df_semana$Total_festivos)
+sd_laboral_psd <- sd(df_semana$Total_laborales)
+sd_anio_ref_psd <- sd(df_semana$ANIO_REFERENCIA)
+```
+
+```{r}
+df_semana_esc<-df_semana
+df_semana_esc$Total_festivos <- scale(df_semana_esc$Total_festivos)
+df_semana_esc$Total_laborales <- scale(df_semana_esc$Total_laborales)
+df_semana_esc$ANIO_REFERENCIA <- scale(df_semana_esc$ANIO_REFERENCIA)
+df_semana_esc
+```
+
+
+```{r}
+train_semana <- df_semana_esc[df_semana_esc$PERIODO < 2018,]
+validation_semana<- df_semana_esc[df_semana_esc$PERIODO == 2018,]
+
+```
+
+```{r}
+
+rf_model <- randomForest(NRO_ACCIDENTES~.-PERIODO,data=train_semana,ntree=2000)
+rf_model$importance
+```
+
+```{r}
+df_modelo_importancia_rf=df_semana[,c('PERIODO','ANIO_REFERENCIA','Total_festivos','Total_laborales','SEMANA_01','SEMANA_02','SEMANA_26','SEMANA_32','SEMANA_52','SEMANA_53', 'NRO_ACCIDENTES')]
+```
+
+Se organiza el conjunto de entrenamiento y validación
+```{r}
+train_semana <- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO < 2018,]
+validation_semana<- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO == 2018,]
+```
+
+Se realiza el modelo de regresión lineal con las variables seleccionadas de acuerdo al árbol
+
+```{r}
+# se genera el modelo de regresión lineal, y como una variable categorica se puede representar como k-1 variables dummies, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.-PERIODO,data=train_semana)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train_semana)
+cat(" MSE_t:",mean((pred-train_semana$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation_semana)
+cat(" MSE_v:",mean((pred-validation_semana$NRO_ACCIDENTES)^2))
+```
+
+
+<div style="color: STEELBLUE;font-size: 150%"> Periodicidad Mensual - Sólo Daños </div>
+<br>
+
+Después de seleccionar el modelo más adecuado para la predicción de los accidentes con tipo = Solo Daños, se calculan los modelo para las diferentes periodicidades mencionadas anteriormente. En este caso para se calcula la periodicidad semanal.
+```{r}
+df_mensual <-  df_psd %>%
+  group_by(PERIODO,ANIO_REFERENCIA,MES) %>%
+  summarize(NRO_ACCIDENTES= sum(NRO_ACCIDENTES),Total_festivos = sum(FESTIVO), Total_laborales= sum(LABORAL))
+```
+
+```{r}
+df_mensual <- dummy_cols(df_mensual, select_columns = c('MES'))
+df_mensual$MES <- NULL
+
+media_fest_psd_mes <- mean(df_mensual$Total_festivos)
+media_laboral_psd_mes <- mean(df_mensual$Total_laborales)
+media_anio_ref_psd_mes <- mean(df_mensual$ANIO_REFERENCIA)
+
+sd_fest_psd_mes <- sd(df_mensual$Total_festivos)
+sd_laboral_psd_mes <- sd(df_mensual$Total_laborales)
+sd_anio_ref_psd_mes <- sd(df_mensual$ANIO_REFERENCIA)
+```
+
+```{r}
+df_mensual_esc<-df_mensual
+df_mensual_esc$Total_festivos <- scale(df_mensual_esc$Total_festivos)
+df_mensual_esc$Total_laborales <- scale(df_mensual_esc$Total_laborales)
+df_mensual_esc$ANIO_REFERENCIA <- scale(df_mensual_esc$ANIO_REFERENCIA)
+df_mensual_esc
+```
+
+
+```{r}
+train_mes <- df_mensual_esc[df_mensual_esc$PERIODO < 2018,]
+validation_mes<- df_mensual_esc[df_mensual_esc$PERIODO == 2018,]
+
+```
+
+```{r}
+
+rf_model <- randomForest(NRO_ACCIDENTES~.-PERIODO,data=train_mes,ntree=2000)
+rf_model$importance
+```
+```{r}
+df_modelo_importancia_rf=df_mensual_esc[,c('PERIODO','ANIO_REFERENCIA','Total_festivos','Total_laborales','MES_01','MES_08','MES_10','MES_12','NRO_ACCIDENTES')]
+```
+
+Se organiza el conjunto de entrenamiento y validación
+```{r}
+train_mes <- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO < 2018,]
+validation_mes<- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO == 2018,]
+```
+
+Se realiza el modelo de regresión lineal con las variables seleccionadas de acuerdo al árbol
+
+```{r}
+# se genera el modelo de regresión lineal, y como una variable categorica se puede representar como k-1 variables dummies, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.-PERIODO,data=train_mes)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train_mes)
+cat(" MSE_t:",mean((pred-train_mes$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation_mes)
+cat(" MSE_v:",mean((pred-validation_mes$NRO_ACCIDENTES)^2))
+```
+
+<br>
+<div style="color: STEELBLUE;font-size: 150%"> Personas Involucradas </div>
+<br>
+
+Para desarrollar el modelamiento de está variable es necesario realizar una homologación del tipo de accidente de acuerdo con su gravedad, es decir, si involucra o no personas. Además, generarán las variables dummies necesarias para la construcción del modelo, y se evalua para el tipo de accidente "personas involucradas" que corresponde a los tipos de gravedad 'Herido" y 'Muerto'.
+
+```{r}
+#Se seleccionan sólo el tipo de accidentes que involucran personas y se crean las variables dummies
+
+df_ppi <- df_p[df_p$GRAVEDAD== "Persona involucrada",]
+df_ppi$GRAVEDAD <- NULL
+df_ppi$DIA <- sprintf("%02d", df_ppi$DIA)
+df_ppi$MES <- sprintf("%02d", df_ppi$MES)
+
+df_modelo_pre <- dummy_cols(df_ppi, select_columns = c('MES','SEMANA','DIA','DIA_NOMBRE'))
+df_modelo_pre$MES <- NULL
+df_modelo_pre$SEMANA <- NULL
+df_modelo_pre$DIA <- NULL
+df_modelo_pre$DIA_NOMBRE <- NULL
+
+
+```
+
+```{r}
+# se divide el conjunto de datos en entrenamiento y validación
+train <- df_modelo_pre[df_modelo_pre$PERIODO < 2018,]
+validation<- df_modelo_pre[df_modelo_pre$PERIODO == 2018,]
+```
+
+# Regresión lineal
+
+Como primer modelo se utilizará una regresión lineal con todas las variables creadas para tener una linea base sobre la cual comparar y seleccionar variables.
+```{r}
+# se genera el modelo de regresión lineal, y como una variable categorica se puede representar como k-1 variables dummies, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.-FECHA-PERIODO-MES_01-SEMANA_01-DIA_01-DIA_NOMBRE_LUNES,data=train)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+
+```
+
+Analizando los resultados de la regresión lineal, según el R2 ajustado, el 39,38% de la variación en los accidentes con personas involucrada esta explicado por las variables utilizadas. Adicionalmente el valor P del estadistico F al ser menor al 5% muestra que al menos una de las variables utilizadas tiene la capacidad de explicar una parte significativa de la variación en los accidentes con personas involucradas.Sin embargo este modelo presenta un inconveniente bastante grande, ya que la desviación entre el MSE de entrenamiento y validación es de aproximadamente el 50.3%, lo que da evidencias clara de un sobreentrenamiento en el modelo.
+
+A continuación se muestra la grafica de las predicciones vs los valores observados de los accidentes con personas involucradas para obtener información adicional 
+
+```{r}
+
+#ggplot(pred, aes(wt, mpg)) + geom_point()
+
+plot(pred,validation$NRO_ACCIDENTES,xlab="Predichos",ylab="Observados",las=1)
+abline(a=0,b=1,lwd=2)
+grid()
+```
+
+En el gráfico de dispersión se observa, que el modelo en niveles mas altos de accidentalidad tiene mayor capacidad de predición que para niveles mas bajos.
+
+El sobreentrenamiento puede ser un problema muy grave para el modelo, porque esto quiere decir que el modelo esta aprendiendo de memoria los datos, pero no tiene una buena capacidad de generalización. Para afrontar este problema a continuación se realizará una serie de técnicas de selección de variables y regularización para intentar mejorar esta situación.
+
+En primera instancia se utilizará un stepwise para apoyar en la selección de las variables.
+```{r}
+modelo_lm_step<-step(modelo_lm,direction = "backward",trace=FALSE)
+pander(summary(modelo_lm_step))
+pander(cat(" AIC:",AIC(modelo_lm)))
+pred=predict(modelo_lm_step,train)
+pander(cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2)))
+pred=predict(modelo_lm_step,validation)
+pander(cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2)))
+```
+
+Se observa un MSE mas alto utilizando este metodo, adicionalmente el sobre entrenamiento sigue existiendo con una desviación del 54% por lo que esta alternativa no es viable para el modelo.
+
+Se trata de aplicar un método de regularización para revisar si se reduce el sobreentrenamiento del modelo, en este caso se aplicará una regresión lasso, ya que esta tiene la capacidad de penalizar parametros que podrían ser la causa del sobre entrenamiento, e incluso tiene por si mismo un metodo de selección de variables.
+
+```{r}
+X <-model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+    SEMANA_01 - DIA_01 - DIA_NOMBRE_LUNES,train)[,-1]
+y <- train$NRO_ACCIDENTES
+
+#Se optimiza el lambda
+grid<-10^seq(10,-4,length=100)
+modelo_lasso<-cv.glmnet(X,y,alpha=1,lambda=grid) # alpha=1 es lasso
+lambda_opt<-modelo_lasso$lambda.min
+modelo_lasso<-glmnet(X,y,alpha=1,lambda = lambda_opt)
+```
+
+```{r}
+modelo_lasso$beta
+```
+```{r}
+
+pred<-predict(modelo_lasso,model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+    SEMANA_01 - DIA_01 - DIA_NOMBRE_LUNES,train)[,-1])
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred<-predict(modelo_lasso,model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+    SEMANA_01 - DIA_01 - DIA_NOMBRE_LUNES,validation)[,-1])
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+Como se puede observar en la parte superior, el modelo sigue sin desempeñarse correctamente aún con la regularización de las variables,dado que el sobre entrenamiento es mayor al 40% aunque comparado con los metodos anteriores esté parametro es mucho mejor
+
+Se intenta probar un método de diferente naturaleza como es el caso de un bosque aleatorio  para analizar su comportamiento y evaluar sus resultados, con el fin de evidenciar alguna mejoría en las medidas y el sobreent
+
+```{r}
+
+rf_model <- randomForest(NRO_ACCIDENTES~.-FECHA-PERIODO,data=train,ntree=2000)
+pred=predict(rf_model,train)
+cat(" MSE_t",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict( rf_model,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+la alternativa del bosque aleatorio aunque mejora el MSE de entrenamiento de forma sustancial  tampoco nos presenta una solución adecuada al sobre entrenamiento, de hecho por el contrario, el sobreentrenamiento se encuentra aun mas marcado con una desviación de más del 450%.
+
+Analizando todos los métodos realizados anteriormente, se evidencia que los modelos se están ajustando demasiado al conjunto de entrenamiento pero no están teniendo  capacidad de generalizar las predicciones en el  conjunto de validación, buscando alternativas para solucionar este problema, se evidencia que la variable semana está tomando demasiada importancia o significancia para los métodos, teniendo en cuenta tanto los valores p de las regresiones lineales iniciales, como la selección de variables realizadas por el método stepwise, adicionalmente genera muchas variables dummy, lo que puede generar problemas en los modelos debido a que genera una matriz muy dispersa. Por esta razón se decide eliminar completamente esta variable y revisar los resultados.
+
+
+```{r}
+#se elimina la variable semana
+df_modelo_pre <- dummy_cols(df_ppi, select_columns = c('MES','DIA','DIA_NOMBRE'))
+df_modelo_pre$MES <- NULL
+df_modelo_pre$SEMANA <- NULL
+df_modelo_pre$DIA <- NULL
+df_modelo_pre$DIA_NOMBRE <- NULL
+```
+
+```{r}
+#se divide la muestra en validación y entrenamiento
+train <- df_modelo_pre[df_modelo_pre$PERIODO < 2018,]
+validation<- df_modelo_pre[df_modelo_pre$PERIODO == 2018,]
+```
+
+```{r}
+# se genera el modelo de regresión lineal sin la variable semana, y como una variable categorica se puede representar como k-1 variables dummies, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.-FECHA-PERIODO-MES_01-DIA_01-DIA_NOMBRE_LUNES,data=train)
+pander(summary(modelo_lm))
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+Como se puede observar en las métricas del error cuadrático medio, la desviación en el resultado entre el MSE del conjunto validación y el de prueba se redujo al 36% , lo que implica que la variable semana estaba causando de alguna manera un sobreentrenamiento en el modelo. Sin embargo la desviación sigue siendo superior al 15%, por lo que el modelo a pesar de la mejora sigue estando sobreentrenado, adicionalmente el MSE en validación no presenta mejoría alguna.
+
+```{r}
+modelo_lm_step<-step(modelo_lm,direction = "backward",trace=FALSE)
+summary(modelo_lm_step)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm_step,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_step,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+
+Al realizar el método de stepwise no se evidencia mejora alguna en las métricas que ayudarán a seleccionar el mejor modelo, por lo cual se decide analizar la posibilidad de una transformación logarítmica  para ver si se mejora el  comportamiento en los datos.
+
+```{r}
+hist(df_modelo_pre$NRO_ACCIDENTES)
+```
+
+Como se puede observar en el histograma, la forma del gráfico tiene una distribución muy cercana a la Normal, sin embargo, se preocederá a realizar la trasnformación para observar sus resultados.
+
+```{r}
+hist(log(df_modelo_pre$NRO_ACCIDENTES))
+```
+
+```{r}
+modelo_lm_log <- lm(log(NRO_ACCIDENTES)~. - FECHA - PERIODO - MES_01  - 
+    DIA_01 - DIA_NOMBRE_LUNES,data=train)
+summary(modelo_lm_log)
+cat("AIC_",AIC(modelo_lm_log))
+pred=predict(modelo_lm_log,train)
+cat(" MSE_t:",mean((exp(pred)-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_log,validation)
+cat(" MSE_v:",mean((exp(pred)-validation$NRO_ACCIDENTES)^2))
+```
+La transformación logarítmica presenta el mejor MSE analizado hasta el momento, con una reducción considerable, además el sobre entrenamiento baja a niveles cercanos al 21%, es una buena aproximación inicial, pero aún se deben realizar ajustes para mitigar esta situación. Se procede a realizar una seleccion de variables por medio del método step wise
+
+
+```{r}
+modelo_lm_log_step<-step(modelo_lm_log,direction = "backward",trace=FALSE)
+summary(modelo_lm_log_step)
+cat("AIC:",AIC(modelo_lm_log_step))
+pred=predict(modelo_lm_log_step,train)
+cat(" MSE_t",mean((exp(pred)-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_log_step,validation)
+cat(" MSE_v:",mean((exp(pred)-validation$NRO_ACCIDENTES)^2))
+```
+
+Al aplicar la selección de variables a la transformación logarÍtmica, se lográ cumplir el objetivo trazado inicialmente, que la desviación entre el MSE de entrenamiento y validación sea menor al 15%. Además, el MSE de validación es de 132, es la mejor métrica que se ha obtenido hasta el momento.
+
+Se procede a realizar de nuevo una Regularización lasso, para analizar como se comporta la regresión sin la variable Semana, para observar el impacto que tiene la penalización de las variables.
+
+```{r}
+X <-model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+     - DIA_01 - DIA_NOMBRE_LUNES,train)[,-1]
+y <- train$NRO_ACCIDENTES
+grid<-10^seq(10,-4,length=100)
+modelo_lasso<-cv.glmnet(X,y,alpha=1,lambda=grid) # alpha=1 es lasso
+lambda_opt<-modelo_lasso$lambda.min
+modelo_lasso<-glmnet(X,y,alpha=1,lambda = lambda_opt)
+
+pred<-predict(modelo_lasso,model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+     - DIA_01 - DIA_NOMBRE_LUNES,train)[,-1])
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred<-predict(modelo_lasso,model.matrix(NRO_ACCIDENTES~.- FECHA - PERIODO - MES_01 - 
+     - DIA_01 - DIA_NOMBRE_LUNES,validation)[,-1])
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+Analizando el MSE en el conjunto de validación, no se encuentra mejoría en comparación con los modelos anteriores, de hecho vuelve a generar un MSE mayor, y sigue generandose un modelo sobreentrenado. Por lo cual se decide analizar otras posibilidades. Se intenta en primera instancia modelar con una máquina de soporte vectorial, con un kernel radial para evaluar sus resultados.
+
+
+```{r}
+#Regression with SVM
+modelsvm = svm(NRO_ACCIDENTES~.-FECHA-PERIODO,train,kernel="radial")
+
+#Predict using SVM regression
+pred = predict(modelsvm, train)
+mean((pred-train$NRO_ACCIDENTES)^2)
+pred = predict(modelsvm, validation)
+mean((pred-validation$NRO_ACCIDENTES)^2)
+```
+Los resultados de la máquina de soporte, presentan un comportamiento similar a los obtenidos mendiante el método de Bosque Aleatorio, con altos niveles de sobre entrenamiento, con buenos niveles de MSE en el conjunto de entrenamiento  pero poca capacidad predictiva en el conjunto de validación.
+
+se intenta realizar un analisis de sensibilidad con un kernel lineal para validar que impacto tiene sobre los resultados.
+
+```{r}
+#Regression with SVM
+modelsvm = svm(NRO_ACCIDENTES~.-FECHA-PERIODO,train,kernel="linear")
+
+#Predict using SVM regression
+pred = predict(modelsvm, train)
+mean((pred-train$NRO_ACCIDENTES)^2)
+pred = predict(modelsvm, validation)
+mean((pred-validation$NRO_ACCIDENTES)^2)
+```
+Cambiar el kernel a lineal,disminuye el sobre entrenamiento con respecto al kernel radial, pero igual este vlaor sigue siendo superior al 15% y adicionalmente el MSE de validación es mucho peor. Debido a que la maquina de soporte vectorial, escala muy bien con el numero de observaciones, pero presenta problemas a medida que el número de variables aumenta, se aplica utilizando las variables elegidas en el stepwise de la transformación logaritmica calculado anteriormente.
+```{r}
+#Regression with SVM
+modelsvm = svm(formula(modelo_lm_log_step),train,kernel="linear")
+
+#Predict using SVM regression
+pred = predict(modelsvm, train)
+mean((exp(pred)-train$NRO_ACCIDENTES)^2)
+pred = predict(modelsvm, validation)
+mean((exp(pred)-validation$NRO_ACCIDENTES)^2)
+```
+Los resultados de la maquina de soporte vectorial mejoran, con respecto al inicial de que utilizaba todas las variables, sin embargo el MSE en el conjunto de validación es superior a metodos anteriormente utilizados, y el sobre entrenamiento sigue siendo superior al 15%
+
+
+Se intenta utilizar un bosque aleatorio para observar el poder de la predicción.
+
+```{r}
+rf_model <- randomForest(NRO_ACCIDENTES~.-FECHA-PERIODO,data=train,ntree=2000)
+rf_model$importance
+pred=predict(rf_model,train)
+cat(" MSE_t",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(rf_model,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+al arbol aunque sigue siendo el modelo que de lejos tiene el mejor MSE en entrenamiento, la diferencia con el conjunto de validación sigue siendo demasiado grande, adicionalmente en validación su MSE no mejora con respecto a los demás modelos, por lo que no se considera una opción viable.
+
+Se realiza el modelo de regresión lineal con las variables seleccionadas de acuerdo al árbol, tomando como punto de corte aquellas que sean superiores a un valor de 5.000 IncNodePurity
+
+```{r}
+# se genera el modelo de regresión lineal, y como una variable categorica se puede representar como k-1 variables dummies, se elimina una de cada variable inicial
+df_modelo_importancia_rf=df_modelo_pre[,c('FECHA','PERIODO','ANIO_REFERENCIA','FESTIVO','LABORAL','SEMANA_SANTA','MES_01','DIA_NOMBRE_DOMINGO','NRO_ACCIDENTES')]
+
+train_rf <- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO < 2018,]
+validation_rf<- df_modelo_importancia_rf[df_modelo_importancia_rf$PERIODO == 2018,]
+
+modelo_lm <- lm(NRO_ACCIDENTES~.-FECHA-PERIODO,data=train_rf)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train_rf)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation_rf)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+Con esta nueva selección de variables el modelo no presenta una, mejoría en comparación al modelo de transformación logaritmica con selección stepwise
+
+se revisa el modelo con support vector machines con la variables seleccionadas por el bosque aleatorio para revisar si existe alguna mejora.
+
+```{r}
+model_svm = svm(NRO_ACCIDENTES~.-FECHA-PERIODO,train_rf,kernel="linear")
+
+#Predict using SVM regression
+pred=predict(model_svm,train_rf)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(model_svm,validation_rf)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+Aplicar selección de variables con base al árbol tampoco presenta una mejora considerable en la maquina de soporte vectorial, por lo que se descarta esta opción
+
+## Selección de modelo
+
+Después de analizar multiples modelos, revisar problemas de sobrentrenamiento y aplicar diferentes metodos de selección de variables y transformaciones, y utilizando principalmente el MSE de validación como métrica para elección del mejor modelo, teniendo en cuenta también el número de variables utilizadas. El modelo de regresión lineal, eliminando inicialmente las variables relacionadas la semana y posteriormente haciendo una selección de variables con un stepwise con el parámetro "backward" y una transformación logaritmica se concluye que esté modelo tiene el menor sobre entrenamiento ya que presenta una desviación del 14.7% entre el MSE de entrenamiento y validación , adicionalmente al interpretar el R2 y se evidencia que  el 41% de la variación en el número de accidentes con personas involucradas es explicado por las variables presentes en el modelo.
+
+```{r}
+modelo_lm_log_step<-step(modelo_lm_log,direction = "backward",trace=FALSE)
+summary(modelo_lm_log_step)
+cat("AIC:",AIC(modelo_lm_log_step))
+pred=predict(modelo_lm_log_step,train)
+cat(" MSE_t",mean((exp(pred)-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_log_step,validation)
+cat(" MSE_v:",mean((exp(pred)-validation$NRO_ACCIDENTES)^2))
+```
+
+```{r}
+saveRDS(modelo_lm_log_step, "./modelo_diario_personas.rds")
+```
+
+<div style="color: STEELBLUE;font-size: 150%"> Periodicidad Semanal </div>
+<br>
+
+
+
+```{r}
+df_semana <-  df_ppi %>%
+  group_by(PERIODO,ANIO_REFERENCIA,SEMANA) %>%
+  summarize(NRO_ACCIDENTES= sum(NRO_ACCIDENTES),Total_festivos = sum(FESTIVO), Total_laborales= sum(LABORAL))
+```
+
+
+```{r}
+df_semana <- dummy_cols(df_semana, select_columns = c('SEMANA'))
+df_semana$SEMANA <- NULL
+
+media_fest <- mean(df_semana$Total_festivos)
+media_laboral <- mean(df_semana$Total_laborales)
+media_anio_ref <- mean(df_semana$ANIO_REFERENCIA)
+
+sd_fest <- sd(df_semana$Total_festivos)
+sd_laboral <- sd(df_semana$Total_laborales)
+sd_anio_ref <- sd(df_semana$ANIO_REFERENCIA)
+```
+
+```{r}
+df_semana_esc<-df_semana
+df_semana_esc$Total_festivos <- scale(df_semana_esc$Total_festivos)
+df_semana_esc$Total_laborales <- scale(df_semana_esc$Total_laborales)
+df_semana_esc$ANIO_REFERENCIA <- scale(df_semana_esc$ANIO_REFERENCIA)
+df_semana_esc
+```
+
+
+```{r}
+train_semana <- df_semana_esc[df_semana_esc$PERIODO < 2018,]
+validation_semana<- df_semana_esc[df_semana_esc$PERIODO == 2018,]
+
+```
+
+```{r}
+
+modelo_lm <- lm(log(NRO_ACCIDENTES)~.-PERIODO,data=train_semana)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train_semana)
+cat(" MSE_t:",mean((exp(pred)-train_semana$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation_semana)
+cat(" MSE_v:",mean((exp(pred)-validation_semana$NRO_ACCIDENTES)^2))
+```
+
+
+```{r}
+modelo_lm_step<-step(modelo_lm,direction = "backward",trace=FALSE)
+summary(modelo_lm_step)
+cat("AIC:",AIC(modelo_lm_step))
+pred=predict(modelo_lm_step,train_semana)
+cat(" MSE_t",mean((exp(pred)-train_semana$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_step,validation_semana)
+cat(" MSE_v:",mean((exp(pred)-validation_semana$NRO_ACCIDENTES)^2))
+```
+
+<div style="color: STEELBLUE;font-size: 150%"> Periodicidad Mensual </div>
+<br>
+
+```{r}
+df_mensual <-  df_ppi %>%
+  group_by(PERIODO,ANIO_REFERENCIA,MES) %>%
+  summarize(NRO_ACCIDENTES= sum(NRO_ACCIDENTES),Total_festivos = sum(FESTIVO), Total_laborales= sum(LABORAL))
+```
+
+
+```{r}
+df_mensual <- dummy_cols(df_mensual, select_columns = c('MES'))
+df_mensual$MES <- NULL
+
+media_fest_mes <- mean(df_mensual$Total_festivos)
+media_laboral_mes <- mean(df_mensual$Total_laborales)
+media_anio_ref_mes <- mean(df_mensual$ANIO_REFERENCIA)
+
+sd_fest_mes <- sd(df_mensual$Total_festivos)
+sd_laboral_mes <- sd(df_mensual$Total_laborales)
+sd_anio_ref_mes <- sd(df_mensual$ANIO_REFERENCIA)
+```
+
+```{r}
+df_mensual_esc<-df_mensual
+df_mensual_esc$Total_festivos <- scale(df_mensual_esc$Total_festivos)
+df_mensual_esc$Total_laborales <- scale(df_mensual_esc$Total_laborales)
+df_mensual_esc$ANIO_REFERENCIA <- scale(df_mensual_esc$ANIO_REFERENCIA)
+df_mensual_esc
+```
+
+
+```{r}
+train_mes <- df_mensual_esc[df_mensual_esc$PERIODO < 2018,]
+validation_mes<- df_mensual_esc[df_mensual_esc$PERIODO == 2018,]
+
+```
+
+```{r}
+
+modelo_lm_log <- lm(log(NRO_ACCIDENTES)~.-PERIODO,data=train_mes)
+summary(modelo_lm_log)
+cat(" AIC:",AIC(modelo_lm_log))
+pred=predict(modelo_lm_log,train_mes)
+cat(" MSE_t:",mean((exp(pred)-train_mes$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_log,validation_mes)
+cat(" MSE_v:",mean((exp(pred)-validation_mes$NRO_ACCIDENTES)^2))
+```
+
+```{r}
+modelo_lm_log_step<-step(modelo_lm_log,direction = "backward",trace=FALSE)
+summary(modelo_lm_log_step)
+cat("AIC:",AIC(modelo_lm_log_step))
+pred=predict(modelo_lm_log_step,train_mes)
+cat(" MSE_t",mean((exp(pred)-train_mes$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm_log_step,validation_mes)
+cat(" MSE_v:",mean((exp(pred)-validation_mes$NRO_ACCIDENTES)^2))
+```
+
+
+<center style="color: STEELBLUE;font-size: 280%"> Agrupación </center>
+<br>
+
+Para realizar el proceso de clustering de los barrios de Medellin de acuerdo con su accidentalidad, lo primero que se debe tener en cuenta son las condiciones actuales de la variable BARRIOS. Sobre ésta en necesario aplicar limpieza de datos para garantizar que los resultados del agrupamiento sean coherentes.
+
+Adicionalmente, al igual que en la etapa de modelación, es necesario crear variables adicionales que complementen el análisis. Para este caso se crea la variable LABORAL, que como se evidenció en el punto anterior, es de gran importancia en los patrones de accidentalidad. 
+
+```{r}
+df <- merge(x = df, y = festivos, by = "FECHA", all.x = TRUE)
+df$LABORAL=ifelse(df$DIA_NOMBRE %in% laborales,1,0)
+df$LABORAL=ifelse(df$FESTIVO == 1,0,df$LABORAL)
+```
+
+
+Al iniciar el análisis se realiza un conteo que permita identificar el número de accidentes por cada barrio identificado. 
+<br>
+```{r}
+df_barrios_accidente <-  df %>%
+  group_by(BARRIO) %>%
+  summarize(NRO_ACCIDENTES=n())
+```
+
+```{r}
+kable(head(df_barrios_accidente)) %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  scroll_box(width = "50%")
+```
+
+<br>
+
+Para analizar la ubicación es necesario revisar la disperción de la variables de Latitud y Longitud que nos ayudarán con la ubicación de cada barrio en un mapa geográfico.
+
+<br>
+```{r}
+#se calculan los boxplot para las variables Latitud y Longitud 
+
+P1 <- ggplot(df, aes(y=Y)) + geom_boxplot(color ="DARKCYAN") + ggtitle('Distribución Latitud') + ylab('Latitud')
+P2 <- ggplot(df, aes(y=X.U.FEFF.X)) + geom_boxplot(color ="DARKCYAN") + ggtitle('Distribución Longitud') + ylab('Longitud')
+grid.arrange(P1, P2, ncol=2)
+```
+<br>
+Como se puede evidenciar en el gráfico anterior, las variables Latitud y Longitud poseen un alto número de valores atípicos o outliers, especialmente la variable Latitud. Por lo cual, se concluyé que la mejor opción para determinar la ubicación de cada barrio en relación con su latitud/longitud es mediante la Mediana de cada variable. 
+
+<br>
+```{r}
+df_barrios_ubicacion <-  df %>%
+  group_by(BARRIO) %>%
+  summarize(NRO_ACCIDENTES=n(),
+            LAT=median(Y),
+            LONG=median(X.U.FEFF.X))
+```
+
+```{r}
+kable(head(df_barrios_ubicacion)) %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  scroll_box(width = "100%")
+```
+
+<br>
+
+Con base en los análisis anteriores y teniendo en cuenta que la ubicación de la información sin barrio queda ubicada fuera del mapa, se toma la decisión de eliminar estas observaciones para garantizar la coherencia en los resultados de los métodos de agrupamiento utilizados en esta etapa. 
+
+```{r}
+
+m <- leaflet(df_barrios_ubicacion) %>% addTiles() %>%
+  addCircleMarkers(lng = df_barrios_ubicacion$LONG, lat = df_barrios_ubicacion$LAT, color = ifelse(df_barrios_ubicacion$BARRIO == '',"red",ifelse(df_barrios_ubicacion$BARRIO == 0,"red","DARKCYAN")), popup = df_barrios_ubicacion$BARRIO )
+m
+```
+<br>
+
+Para iniciar con los métodos de agrupación, se debe realizar la limpieza de los nombre de los barrios, buscando que estén homologados y garantizando que concuerden con la ubicación definida por sus valores asociados referentes a latitud y longitud. Además se transponen las variables categoricas del dataframe, para dejar cada tipo de clasificación como un atributo del barrio a analizar. la variables elegidar para hacer la agrupación son:
+
+- **ATROPELLO**: Corresponde al número de accidentes entre el 2014 y 2018 que involucran una lesión categorizada como atropello.
+- **CHOQUE**: Corresponde al número de accidentes entre el 2014 y 2018 que involucran un choque.
+- **OTRO**: Corresponde al número de accidentes entre el 2014 y 2018 que involucran Volcamiento, Caída de ocupante, Incendio y Otros.
+- **HERIDO**: indica el número de accidentes que entre 2014 y 2018 que tuvieron heridos.
+- **MUERTO**: indica el número de accidentes que entre 2014 y 2018 que tuvieron muertos.
+- **SOLO_DANOS** indica el número de accidentes que entre 2014 y 2018 que solo tuvieron daños materiales.
+- **NO_LABORAL**: Corresponde al número de accidentes entre el 2014 y 2018 se presentaron en días no laborales (sábados, domingos y días festivos).
+- **LABORAL**: Corresponde al número de accidentes entre el 2014 y 2018 se presentaron en días laborales.
+
+<br>
+
+
+```{r}
+#se realiza la limpieza de datos para la variable BARRIO
+
+df_modelo <- df
+df_modelo<-subset(df_modelo, df_modelo$BARRIO!="0")
+df_modelo<-subset(df_modelo, df_modelo$BARRIO!="")
+df_modelo$BARRIO[which(df_modelo$BARRIO == "6001")] = "La Palma"
+df_modelo$BARRIO[which(df_modelo$BARRIO == "7001")] = "Buga Patio Bonito"
+df_modelo$BARRIO[which(df_modelo$BARRIO == "9004")] = "Barro Blanco"
+df_modelo$BARRIO[which(df_modelo$BARRIO == "9086")] = "Santa Elena Sector Central"
+df_modelo$BARRIO[which(df_modelo$BARRIO == "Aures No. 2")] = "Aures No.2"
+df_modelo$BARRIO[which(df_modelo$BARRIO == "Berlin")] = "Berlín"
+df_modelo$BARRIO[which(df_modelo$BARRIO == "El Corazon El Morro")] = "El Corazón"
+df_modelo$BARRIO[which(df_modelo$BARRIO == "Nueva Villa de La Iguaná")] = "Nueva Villa de la Iguaná"
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Aguas Frias')] = 'Aguas Frías'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Area De Expansion Altavista')] = 'Área de Expansión Altavista'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Área de Expansión Altos de Calasanz')] = 'Calasanz Parte Alta'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Area De Expansion Belen Rincon')] = 'Área de Expansión Belén Rincón'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Asomadera No. 1')] = 'Asomadera No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Asomadera No. 2')] = 'Asomadera No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Asomadera No. 3')] = 'Asomadera No.3'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='AUC1')] = 'Cabecera Urbana Corregimiento San Cristóbal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='AUC2')] = 'Cabecera Urbana Corregimiento San Cristóbal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Barrio de Jesús')] = 'Barrios de Jesús'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Bermejal-Los Alamos')] = 'Bermejal-Los Álamos'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Bomboná No. 1')] = 'Bomboná No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Bomboná No. 2')] = 'Bomboná No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Cabecera San Antonio de Prado')] = 'San Antonio de Prado'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Cabecera Urbana San Cristobal')] = 'Cabecera Urbana Corregimiento San Cristóbal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Campo Valdés No. 1')] = 'Campo Valdés No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Campo Valdés No. 2')] = 'Campo Valdés No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Corregimiento de San Antonio de Prado')] = 'San Antonio de Prado'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Corregimiento de Santa Elena')] = 'Santa Elena Sector Central'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='El Diamante No. 2')] = 'El Diamante No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='El Progreso No.2')] = 'Progreso No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='El Vergel')] = 'Los Cerros El Vergel'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='La Esperanza No. 2')] = 'La Esperanza No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='La Loma Oriental')] = 'Cabecera Urbana Corregimiento San Cristóbal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Loma de los Bernal')] = 'La Loma de Los Bernal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='López de Mesa')] = 'López de  Mesa'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Manrique')] = 'Manrique Oriental'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Manrique Central No. 1')] = 'Manrique Central No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Manrique Central No. 2')] = 'Manrique Central No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='María Cano Carambolas')] = 'María Cano-Carambolas'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Moscú No. 1')] = 'Moscú No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Moscú No. 2')] = 'Moscú No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Nueva Villa de Aburrá')] = 'Nueva Villa del Aburrá'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Nueva Villa de la Iguaná')] = 'Nueva Villa de La Iguaná'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Pedregal Bajo')] = 'Pedregal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Piedras Blancas')] = 'Piedras Blancas - Matasano'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Piedras Blancas Represa')] = 'Piedras Blancas - Matasano'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='San Cristobal - La Palma')] = 'Cabecera Urbana Corregimiento San Cristóbal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='San Javier')] = 'San Javier No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='San José de la Montaña')] = 'San José de La Montaña'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='San José la Cima No. 1')] = 'San José La Cima No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='San José la Cima No.2')] = 'San José La Cima No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Santa María de los Ángeles')] = 'Santa María de Los Ángeles'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Santo Domingo Savio No. 1')] = 'Santo Domingo Savio No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Santo Domingo Savio No. 2')] = 'Santo Domingo Savio No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Altavista')] = 'Altavista'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Chacaltaya')] = 'Santa Elena Sector Central'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano El Plan')] = 'El Plan'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano el Tesoro')] = 'El Tesoro'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano La Loma')] = 'La Loma'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Mirador del Poblado')] = 'Altos del Poblado'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Palma Patio')] = 'Cabecera Urbana Corregimiento San Cristóbal'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Palmitas')] = 'Palmitas Sector Central'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Pedregal alto')] = 'Pedregal Alto'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Potrerito')] = 'Potrerito'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano Travesias')] = 'Travesías'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='U.P.B.')] = 'U.P.B'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Versalles No. 1')] = 'Versalles No.1'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Versalles No. 2')] = 'Versalles No.2'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Villa Liliam')] = 'Villa Lilliam'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Facultad de Minas U. Nacional')] = 'Facultad de Minas'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Batallón Cuarta Brigada')] = 'Cuarta Brigada'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='El Estadio')] = 'Estadio'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Suburbano El Llano')] = 'El Llano SE'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='La Oculta')] = 'Yarumalito'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='B. Cerro  El Volador')] = 'Ecoparque Cerro El Volador'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='B. Cerro El Volador')] = 'Ecoparque Cerro El Volador'
+df_modelo$BARRIO[which(df_modelo$BARRIO =='Laureles Estadio')] = 'Laureles'
+```
+
+
+```{r}
+#Se crean los atributos para la variable barrio de acuerdo con los tipos de accidentes y gravedad de dataframe inicial
+
+df_clase1 <- as.data.frame.matrix(xtabs(~ BARRIO + CLASE, data = df_modelo))
+df_gravedad1 <- as.data.frame.matrix(xtabs(~ BARRIO + GRAVEDAD, data = df_modelo))
+df_laboral1 <- as.data.frame.matrix(xtabs(~ BARRIO + LABORAL, data = df_modelo))
+df_agrupacion <- cbind(df_clase1,df_gravedad1,df_laboral1)
+df_agrupacion <- df_agrupacion %>% 
+  rename(
+    "NO_LABORAL" = "0",
+    "LABORAL" = "1",
+    "SOLO_DANOS" = "SOLO DAÑOS"
+    )
+```
+
+```{r}
+kable(head(df_agrupacion)) %>%
+  kable_styling(bootstrap_options = "striped") %>%
+  scroll_box(width = "100%")
+```
+<br>
+
+Finalmente, antes de aplicar los métodos para la agrupación es importante realizar un análisis que permita identificar los posibles grupos de acuerdo con la dispersión de las observaciones. para esto se grafican las 8 variables elegidas versus el barrio. Es importante resaltar que se deben estandarizar las variables buscando que la escala en la cual se encuentran cada una, sea comparable con el resto y no afecten los métodos de agrupamiento aplicados. 
+
+
+```{r}
+#se estandariza el dataframe
+
+df_agrupacion_escalada<-as.data.frame.matrix(scale(df_agrupacion,center = TRUE,scale = TRUE))
+```
+
+```{r}
+#se realiza el gráfico de dispersión de cada una de variables versus el barrio 
+
+p1<-ggplot(df_agrupacion_escalada) +
+  geom_point(aes(y = Atropello, x=rownames(df_agrupacion_escalada), colour = "Atropello")) + 
+  geom_point(aes(y = Choque, x=rownames(df_agrupacion_escalada), colour = "Choque")) +
+  geom_point(aes(y = Otro, x=rownames(df_agrupacion_escalada), colour = "Otro")) +
+  geom_point(aes(y = HERIDO, x=rownames(df_agrupacion_escalada), colour = "HERIDO")) +
+  geom_point(aes(y = MUERTO, x=rownames(df_agrupacion_escalada), colour = "MUERTO")) +
+  geom_point(aes(y = SOLO_DANOS, x=rownames(df_agrupacion_escalada), colour = "SOLO_DANOS")) +
+  geom_point(aes(y = NO_LABORAL, x=rownames(df_agrupacion_escalada), colour = "NO_LABORAL")) +
+  geom_point(aes(y = LABORAL, x=rownames(df_agrupacion_escalada), colour = "LABORAL"))
+
+p1 + theme(axis.text.x = element_text(size = 2, angle = 90),
+          axis.text.y = element_text(size = 2))+ ggtitle('Análisis de Dispersión') + xlab('Barrios') + ylab("Variables")
+```
+<br>
+
+Con la gráfica anterior, se puede inferir que los patrones de accidentalidad en la gran mayoria de los barrios analizados son bajos. Los patrones de accidentalidad alta se concentran un muy pocos barrios y se pueden considerar como outliers o valores atípicos. 
+<br>
+
+<div style="color: STEELBLUE;font-size: 150%"> Método 1: Agrupamiento Jerárquico </div>
+<br>
+Para iniciar con este método de grupamiento jerárquico no supuervisado, se debe calcula matriz de distancias entre cada uno de los barrios analizados con los datos estandarizados, para posteriormente ejecutar el algoritmo de minimización de distancia y realizar la agrupación. 
+<br>
+```{r}
+df_agrupacion_dist <- dist(df_agrupacion_escalada)
+agrupacion_hc <- hclust(df_agrupacion_dist)
+```
+
+```{r}
+plot(agrupacion_hc, labels = FALSE, hang = -1,  xlab = "Barrios", ylab = "Altura")
+rect.hclust(agrupacion_hc,k=3,border=1:3)
+```
+<br>
+
+```{r}
+grupos <- cutree(agrupacion_hc,k=3)
+pander(table(grupos))
+```
+
+```{r}
+df_agrupacion$grupo <- grupos
+pander(aggregate(df_agrupacion, list(df_agrupacion$grupo), mean))
+```
+
+```{r}
+pander(aggregate(df_agrupacion, list(df_agrupacion$grupo), sd))
+```
+<br>
+Se observa que, realizando un corte para obtener 3 grupos en el dendograma se cuentra 1 grupo con el 94% de los individuos, y los otros dos grupos quedan con el 6% restante. Esta agrupación es coherente en relación con el gráfico de dispersición calculado anteriormente donde se evidencia que la gran mayoria de los barrios poseen patrones de accidentalidad muy similares. 
+
+Por otro lado, analizando los valores promedio de las 8 variables para cada uno de los grupos, se confirma la hipotesis anterior de que el grupo 1 con mayor cantidad de individios es el grupo con menor accidentalidad; en promedio el número de accidentes que involucran personas muertas en el periodo analizado es 3 y el número de choques es 349, 84% menos que el número de choques del grupo 2 que es 2245.
+
+El único barrio ubicado en el grupo 3 es La Candelaria. Barrio ubicado en zona centro oriental de la cuidad de Medellín que se caractiza por su alto flujo vehícular ya que cruza los ejes viales arteriales que comunican al centro con todos los sectores de la ciudad.
+<br>
+
+<div style="color: STEELBLUE;font-size: 150%"> Método 2: K-MEANS </div>
+<br>
+Otra técnica que se aplicará para analizar el ajuste del agrupamiento de los barrios por accidentalidad en Medellín es el método de [K-MEANS](https://rpubs.com/rdelgado/399475). En el cual se buscará crear *K* grupos definidos por un centroide. Se realizó un testeo manual para terminar el *K Optimo* para realizar el agrupamiento y se encontró que las observaciones convergen rápidamente a los centroides con *K* mayor o igual a 3. Para comprobar la hipótesis se utilizará el Método del Codo o Elbow Method.
+
+```{r}
+#Método del Codo o Elbow Method
+#Función de Kmeans
+wss <- function(k) {
+  kmeans(df_agrupacion_escalada, k, nstart = 10 )$tot.withinss
+}
+
+# se crean los valores de K de 1 a 10 posibles grupos 
+k.values <- 1:10
+
+wss_values <- map_dbl(k.values, wss)
+
+#grafica
+plot(k.values, wss_values,
+       type="b", pch = 19, frame = FALSE, 
+       xlab="Número de grupos",
+       ylab="Suma total de cuadrados", col="DARKCYAN")
+```
+<br>
+
+como se puede observar, a partir de k mayor o igual 3 no hay variaciones significativas para incluir nuevos grupos, por lo que se define un k optimo de k=3
+
+```{r}
+#Se aplica el algoritmo de kmeans 
+df_agrupacion_kmeans <- kmeans(df_agrupacion_escalada,3)
+
+#Se crea la función cluster en el dataframe agrupapo por barrio
+df_agrupacion$cluster = df_agrupacion_kmeans$cluster
+
+# se muestra el numero de barrios por grupo 
+pander(table(df_agrupacion_kmeans$cluster))
+```
+<br>
+Déspues de aplicar la técnica del K-MEANS, se puede identificar que las observaciones quedaron más distribuidas en cada uno de los grupos, en relación con el método de Agrupamiento Jerárquico. Ahora veamos los valores promedio de cada grupo. 
+
+```{r}
+pander(aggregate(df_agrupacion, list(df_agrupacion$cluster), mean))
+```
+<br>
+Al igual que en el Agrupamiento Jerárquico, el grupo con mayores individuos o barrios es el que presenta menores patrones de accidentalidad, en promedio, se presentan 30 accidentes que involucran atropellos de personas y sólo un muerto en todo el periodo analizado. A su vez, el grupo con menor número de individuos es el que presenta mayor accidentalidad; en el se encuentran barrios como: Belén, Boston, Caribe, Guayabal y La Candelaria. 
+<br>
+
+<div style="color: STEELBLUE;font-size: 150%"> Representación Geoespacial </div>
+
+
+```{r  include= FALSE}
+#Se carga al archivo en formato Shapefile para la ubicación de los barrios en medellín
+
+barrios_med=readOGR('C:\\Users\\Administrador\\Desktop\\Accidentalidad-Medellin\\Datasets\\Mapas\\Barrio_Vereda.shp', layer = "Barrio_Vereda", encoding = "UTF-8", use_iconv=TRUE)
+```
+
+```{r}
+#Se realiza la limpieza y homologación para que la información cruce con df_modelo_agrupado
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='Potrera Miserenga')] = 'Palmitas Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='San José del Manzanillo')] = 'Área de Expansión Altavista'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='El Placer')] = 'Santa Elena Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='El Jardín')] = 'Área de Expansión Altavista'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='El Cerro')] = 'Santa Elena Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='Montañita')] = 'Área de Expansión San Antonio de Prado'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='San José')] = 'San José de La Montaña'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='El Astillero')] = 'Área de Expansión San Antonio de Prado'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='Mazo')] = 'Santa Elena Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='El Corazón El Morro')] = 'Piedras Blancas - Matasano'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='La Sucia')] = 'Palmitas Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='La Aldea')] = 'Palmitas Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='La Frisola')] = 'Palmitas Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='La Suiza')] = 'Palmitas Sector Central'
+barrios_med$NOMBRE[which(barrios_med$NOMBRE =='Área de Expansión El Noral')] = 'Piedras Blancas - Matasano'
+
+#Se crea la columna NOMBRE para cruzar la información
+barrios_modelo = cbind(NOMBRE = rownames(df_agrupacion), df_agrupacion)
+rownames(barrios_modelo) <- 1:nrow(barrios_modelo)
+
+```
+
+```{r}
+#se cruza los datos de ubicación para traer el cluster/grupo
+barrios_med1 = merge(x = barrios_med, y = barrios_modelo[ , c("NOMBRE", "cluster")], by = "NOMBRE", all.x=TRUE)
+```
+
+```{r}
+# Se definen los colores para el mapa y se grafica
+
+colores = as.character(ifelse(barrios_med1@data$cluster==1, "green",
+                              ifelse(barrios_med1@data$cluster==2, "red",
+                                     ifelse(barrios_med1@data$cluster==3, "yellow", "black"))))
+
+m=leaflet(barrios_med1)
+nombres_barrios = barrios_med1@data$NOMBRE
+m=addPolygons(m,popup=nombres_barrios,color=colores)
+m=addTiles(m)
+m
+
+```
+
+<br>
+Se presenta la ubicación en el mapa de cada uno de barrios asignados a los grupos determinados por el método de K-MEANS.
+
+- **GRUPO 1 - Accidentalidad Baja**: Identificado con color verde.
+- **GRUPO 3 - Accidentalidad Media**: Identificado con color Amarillo.
+- **GRUPO 2 - Accidentalidad Alta**: Identificado con color Rojo.
+
+De acuerdo con la ubicación de cada barrio en el mapa, es posible concluir que los patrones de alta accidentalidad no son muy comunes en la cuidad de Medellin. Además, los barrios que pertenecen a esta categoría son barrios donde el flujo vehícular y de peatones es muy alto. Están ubicados generalmente en el centro de la cuidad y sus alrededores. Por otro lado, los barrios con menores patrones de accidentalidad están ubicados en las afueras de la cuidad y no tiene alto flujo de vehículos o peatones. 
+
+<div style="color: STEELBLUE;font-size: 150%"> Propuestas y planes de acción </div>
+<br>
+En pro de disminuir la accidentalidad en la cuidad de medellín, se plantean las siguientes propuestas enfocadas en el facor humano que es el principal detonante de los accidentes de transito. Estas propuestas se plantean principalmente para el **GRUPO 2 - Accidentalidad Alta** aprovechando las características identificadas en el analisis anterior. 
+
+- **Línea de vida**: campaña para colocar un estiker que visualmente permita entender al conductor cuánta distancia debe de tener con los otros vehículos.
+
+- **Billetera vial**: Campaña que compare porque hacer la tecnomecánica sale más barato que pagar un arreglo posterior a un daño o un repuesto después de un accidente. Cambiando la concepción de que la tecnomecánica es un ahorro y no una obligación.
+
+- **La cámara del juicio**: Cambiar la concepción de las cámaras solo como una multa, genera presión social y psicológica en donde el detector de velocidad no muestre solo los kilómetros sino emojis o frases impactantes según sea el caso, si cumple o no con las normas.
+
+- **Diplomado para conductores de servicios públicos**: Formación adicional a la normal para reforzar conocimientos prácticos y teóricos de conducción. Se entrega certificado y stiker o insignia al final para demostrar que es un “Conductor profesional”.  Para generar confianza en usuarios y que se empiece a volver un requisito simbólico de las empresas de transporte público. 
+
+- **Cuida tu talento**: campaña para hacer parte a las empresas de la disminución de accidentalidad por puntualidad. Ya sea a través de reconocimiento local a los empleados más puntuales de todas las organizaciones, o la flexibilización horaria cuando alguien sale tarde o vive lejos.
+
+- **App to para conducir**: Aplicación simple que a través de un cuestionario/checklist sencillo permita saber a los conductores si tienen las condiciones para conducir incluso antes de hacerlo. Ligándolo a un sistema de puntos por cada vez que se use que se redime en descuentos para repuestos o pago de seguros como estrategia de responsabilidad de las organizaciones que ofrecen estos servicios.
+
+- **Punto salvavidas**: cambiar el concepto de Estrella Negra de forma positiva a través de un aviso con el mensaje “Si disminuyes tu velocidad en este punto, salvas una vida” en los lugares con mayor tasa de accidentalidad y mortandad vial.
+
+
+<center style="color: STEELBLUE;font-size: 280%"> Conclusiones </center>
+<br>
+
+Según el objetivo de este trabajo el cual era la Identificación de fechas en las cuales se reporta mayor accidentalidad y su predicción  de forma diaria semanal y mensual, además de  la observación de barrios en los que se presenta un mayor nivel de siniestros en la ciudad de Medellín por medio de agrupaciones , dado los resultados que se presentaron en el reporte técnico se puede concluir que a través de la calibración de modelos estadísticos soportados por la dinámica histórica de accidentes reportados en la ciudad de Medellín entre los años 2014 y 2018, y el apoyado de variables determinantes para la explicación de siniestros como lo son las festividades más importantes que se celebran en la ciudad, por ejemplo, feria de las flores, día de la madre y semana santa entre otros, se logro predecir de forma satisfactoria la accidentalidad en Medellín con modelos que cumplen con las exigencias requeridas como un valor de sobre entrenamiento inferior al 15% y la minimización del MSE.  
+
+Además de lo anterior se logró realizar buen agrupamiento de barrios según el nivel de accidentalidad utilizando técnicas estadísticas que nos permiten relacionar los barrios de la ciudad y representarlos gráficamente para identificar claramente cuáles son los lugares donde se presentan más accidentes, esto permitió concluir que los patrones de alta accidentalidad no son muy comunes en la cuidad de Medellín. Además, los barrios que pertenecen a esta categoría son barrios donde el flujo vehicular y de peatones es muy alto. Están ubicados generalmente en el centro de la cuidad y sus alrededores. Por otro lado, los barrios con menores patrones de accidentalidad están ubicados en las afueras de la cuidad y no tiene alto flujo de vehículos o peatones. Por último el  aplicativo  que se creó a través de este trabajo logra identificar en que momentos se pueden generar un mayor número de accidentes y determinar barrios de alto riesgo de accidentalidad para generar acciones tempranas de control por parte de los agentes de tránsito y demás entidades competentes ,esto con el fin de crear estrategias de alertas tempranas en las periodicidades y barrios con mayores índices de accidentalidad que permitan reducir dicho número de casos, para así salvar vidas y mejorar la movilidad de la ciudad.
+
+
+</div>
+
+
+#Repositorio GIT-HUB: https://github.com/sagiraldoar/Analitica-predictiva
+
+
+<br>
+<a id="note1" href="#note1ref"><sup>1</sup></a> Artículo: Características de los accidentes de tránsito con personas lesionadas atendidas en un hospital de tercer nivel de Medellín, 1999-
+2008
+<a id="note1" href="#note1ref"><sup>2</sup></a> https://www.alertapaisa.com/noticias/valle-de-aburra/81-personas-fallecieron-en-accidentes-de-transito-en-medellin-el-primer
+
+<a id="note1" href="#note1ref"><sup>3</sup></a> Definición tomada de Wikipedia.org
+
