@@ -1,0 +1,367 @@
+---
+title: "Reporte Técnico"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<style>
+body {
+text-align: justify}
+</style>
+
+# Accidentalidad en Medellín
+
+El enfoque de este reporte es modelar los datos de accidentalidad de la ciudad de Medellín, utilizando datos para el periodo 2014-2018. En donde se buscará dos objetivos principales:
+
+1. Predecir el Número de accidentes de acuerdo a su tipo y a nivel diario, semanal y mensual
+2. Crear un agrupamiento de todos los barrios de la ciudad de acuerdo a sus característica específicas de accidentalidad y crear un plan de acción con base en los resultados.
+
+El insumo principal de este trabajo son los [datos abiertos de movilidad](https://geomedellin-m-medellin.opendata.arcgis.com/search?tags=movilidad) que publica la Alcaldía de Medellín en el portal [GeoMedellín](https://www.medellin.gov.co/geomedellin/).
+
+# Predicción
+
+## Cargue de los datos
+
+Como primer paso se realiza la carga de los datos, los cuales se encuentran en un dataset diferente para cada año y posteriomente se concatenan para tener centralizada la información y facilitar los análisis
+
+```{r}
+wd="C:/Users/Juan.Palacio/Analitica predictiva/Accidentalidad-Medellin"
+  setwd(wd)
+  
+  df_2014=read.csv("./Datasets/Accidentalidad_georreferenciada_2014.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2015=read.csv("./Datasets/Accidentalidad_georreferenciada_2015.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2016=read.csv("./Datasets/Accidentalidad_georreferenciada_2016.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2017=read.csv("./Datasets/Accidentalidad_georreferenciada_2017.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  df_2018=read.csv("./Datasets/Accidentalidad_georreferenciada_2018.csv",strip.white=TRUE,
+                    encoding = "UTF-8")
+  
+  df_inicial = rbind(df_2014,df_2015,df_2016,df_2017,df_2018)
+ 
+```
+
+```{r}
+unique(df_inicial$GRAVEDAD)
+```
+
+
+
+## Limpieza de los datos y creación de dataframe inicial
+
+En primera instancia de se realiza una limpieza de los datos inicial,y una agrupación de los registros  para la creación del dataframe final. 
+
+
+```{r}
+# se organiza la columna de la variable fecha
+library(tidyr)
+df <- separate(data = df_inicial, col = FECHA, into = c("FECHA", "Sobrante"), sep = " ")
+df$FECHA <- as.Date(df$FECHA, format = "%Y/%m/%d")
+
+# Se limpian los datos y de la columna CLASE y se agrupan en 3 categorías
+df$CLASE[df$CLASE=='Choque'] <- "Choque" 
+df$CLASE[df$CLASE=='Volcamiento'] <- "Otro" 
+df$CLASE[df$CLASE=='Atropello'] <- "Atropello" 
+df$CLASE[df$CLASE=='Caída de Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Caida Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Caida de Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Caída Ocupante'] <- "Otro" 
+df$CLASE[df$CLASE=='Choque y Atropello'] <- "Choque" 
+df$CLASE[df$CLASE=='otro'] <- "Otro"
+df$CLASE[df$CLASE=='Incendio'] <- "Otro"
+df$CLASE[df$CLASE==""] <- "Otro"
+
+df$GRAVEDAD[df$GRAVEDAD=="MUERTO"] <- "PERSONA AFECTADA"
+df$GRAVEDAD[df$GRAVEDAD=="HERIDO"] <- "PERSONA AFECTADA"
+
+#Se agrupa por clase y por día
+library(dplyr,warn.conflicts = FALSE)
+df <-  df %>%
+  group_by(FECHA,PERIODO,MES,DIA,DIA_NOMBRE,GRAVEDAD) %>%
+  summarize(NRO_ACCIDENTES=n())
+```
+A continuación se realiza una breve descripción de las variables iniciales:
+
+- **FECHA**: Fecha en formato AAAA-MM-DD
+- **PERIODO**: Entero que corresponde la año respectivo
+- **MES**: Entero que corresponde al mes respectivo
+- **DIA**: Entero que corresponde al día respectivo
+- **DIA_NOMBRE**: Es una cadena de texto que representa el nombre del día
+- **CLASE**: Es una agrupación de los tipos de accidente creados para la modelación (Choque, Atropello y Otros)
+- **NRO_ACCIDENTES**: Es el número de accidentes presentados en la ciudad para la fecha en cuestión
+
+## Creación de variables adicionales.
+
+Para tener mayores herramientas que permitan una mejor capacidad de predicción de los modelos que se utilizarán más adelante, se crearon una serie de variables que en primera instancia podrían tener en mayor o menor medida influencia en el número de accidentes que se producen día a día:
+
+- **ANIO_REFERENCIA**: Se toma el 2014 como año de referencia y a cada año se le resta este valor, para reducir la cardinalidad de los datos y evitar problemas en los modelos, se toma como variable continua para tener la posibilidad de predecir futuros años.
+- **SEMANA**: se obtiene el número de semana de la fecha
+- **LABORAL**: 1 Si el día es laboral y 0 si no lo es (SÁBADO,DOMINGO Y FESTIVO)
+- **FESTIVO**: 1 Si el día es FESTIVO y 0 si no lo es.
+- **HALLOWEEN**: Se celebra el 31 de octubre de cada año, y muchas personas y niños salen en las horas de la noche a pedir dulces lo que puede aumentar el riesgo de accidentes.
+- **NAVIDAD** Día que se celebra la navidad, 25 de diciembre
+- **FIN_DE_AÑO**: Ultimo día del año que muchas personas no trabajan y hay mucho movimiento en la ciudad
+- **FERIA_DE_FLORES**: Evento festivo tradicional en la ciudad que se celebra en Agosto
+- **SEMANA_SANTA**: Es la semana que se celebran ceremonias religiosas, usualmente en el mes de abril
+- **FIESTA_DEL_TAMARINDO**: Es una fiesta, que se celebra en Santafe de Antioquia, lugar donde muchas personas de la ciudad tienen propiedas
+- **FIESTA_DE_LOS_ZOCALOS**: Fiesta en guatape en donde muchas personas se pueden movilizar
+- **DIA_DE_LA_MADRE**: Es el segundo Domingo de Mayo, es un día que generalmente tiene altos niveles de accidentalidad y homicidios
+- **DIA_SIN_CARRO**: Es un día al año en donde no es permitido movilizarse en transporte particular, lo que se esperaría que se reduzca la accidentalidad
+- **MARATÓN_DE_LAS_FLORES**: Es una maraton que se corre en la ciudad de medellin, en donde se cierra muchas vías de la ciudad, lo que puede reducir la accidentalidad
+
+
+
+```{r}
+#se crea la variable año de referencia
+#df$ANIO_REFERENCIA <- df$PERIODO -2014
+
+#Se agrega variable semana
+df$SEMANA <- format(df$FECHA,"%V")
+
+# Se agregan  variable de FESTIVO al modelo
+festivos=read.csv("./Datasets/Festivos.csv")
+festivos$FECHA <- as.Date(festivos$FECHA, format = "%Y-%m-%d")
+df <- merge(x = df, y = festivos, by = "FECHA", all.x = TRUE)
+  
+# Se agrega variable LABORAL al modelo
+laborales=c('LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES')
+df$LABORAL=ifelse(df$DIA_NOMBRE %in% laborales,1,0)
+df$LABORAL=ifelse(df$FESTIVO == 1,0,df$LABORAL)
+
+
+#Se agregan fechas especiales
+#df_fechas_especiales=read.csv("./Datasets/Fechas especiales.csv",strip.white=TRUE,
+                                    #  encoding = "UTF-8")
+#df_fechas_especiales$FECHA <- as.Date(df_fechas_especiales$FECHA, format = "%Y-%m-%d")
+#df <- merge(x = df, y = df_fechas_especiales, by = "FECHA", all.x = TRUE)
+
+```
+
+
+
+
+## Análisis exploratorio de los datos
+
+Se realiza un analisis exploratorio de los datos, para conocer de una mejor manera las características del conjunto de datos y realizar descubrimientos iniciales para soportar la modelación posterior.
+
+### Temporalidad
+
+
+A continuación se muestra una gráfica que representa cual ha sido la tendencia en el número de accidentes para los años analizados:
+
+```{r}
+library(ggplot2)
+
+# Barplot
+ggplot(df, aes(x=PERIODO, y=NRO_ACCIDENTES)) + 
+  geom_bar(stat = "identity")
+```
+
+Como se puede observar en la gráfica anterior, se evidencia inicialmente una tendencia creciente desde el año 2014 hasta el 2016 donde se alcanza el pico máximo de accidentes, sin embargo a partir de allí se observa una leve reducción en los mismos tantos para el año 2017 como 2018. Esta situación debe analizarse con cuidado en la modelación debido a que al no existir una tendencia marcada, y sobre todo teniendo en cuenta que los datos del año 2018 serán usados para validar, se podría presentar problemas de sobreentrenamiento, es decir que el modelo tendría buena capacidad predictiva en el conjunto de entrenamiento, pero muy poca en el conjunto de validación.
+
+
+Se procede a revisar la importancia del mes en que ocurren los accidentes , para identificar si existe algun patron existente.
+
+```{r}
+ggplot(df, aes(x=factor(MES), y=NRO_ACCIDENTES)) + 
+  geom_bar(stat = "identity")
+```
+
+
+De la gráfica anterior resalta principalmente la baja cantidad de accidentes que presenta el mes de enero en comparación los demás meses, esto debido probablemente a que gran parte de la población se encuentra en vacaciones por estas epocas tanto los estudiantes como los trabajadores, lo que reduce los indices de accidentalidad. En general se evidencia que algunos meses como es el caso de Agosto que presentan aldos indices de accidentalidad en comparación de los demas, por lo que a primera vista esta variable podría ser relevante en la modelación.
+
+Continuando en análisis de la temporalidad, se crea el siguiente histograma para validar, si existe algún rango de fechas dentro del mes que muestre un comportamiento anormal de aciddentalidad
+
+```{r}
+hist(df_inicial$DIA, 
+     main="Histograma por dia del mes", 
+     las=1, 
+     breaks=5)
+```
+Observando el histograma generado, no se evidencia una diferencia clara en algún momento del mes en particular, por lo que a priori no parece ser una variable importante, sin embargo si podrías explicar pequeñas variaciones en días particulares.
+
+### Días especiales
+
+A continuación se evaluará una serie de días especiales dentro de la ciudad de Medellín para analizar que comportamiento tienen estas en los indices de accidentalidad.
+
+
+
+### Clases de accidente
+
+
+Teniendo en cuenta la agrupación mencionada anteriormente en cuanto a los tipos de accidentes, se presentan a continuación los boxplot para cada una de estas:
+
+```{r}
+pl <- ggplot(df, aes(x=factor(GRAVEDAD),y=NRO_ACCIDENTES))
+pl + geom_boxplot()
+```
+
+Analizando el gráfico anterior, se logra apreciar que es mayor la cantidad de accidentes es los cuales existen personas involucradas Y presenta un mayor cantidad de outliers con valores altos,por otro lado la dispersión de los accidentes donde solo se presentan daños es mucho mas amplia, por lo que puede tomar muchos mas valores que el otro tipo de gravedad. 
+
+
+## Modelación
+
+Para cumplir el primer objetivo de este proyecto, se buscará predecir la accidentalidad para cada tipo de gravedad en diferentes temporalidades (diaria, semanal y mensual) Utilizando diferentes técnicas estadistícas y algoritmos de machine learning para la selección de un modelo optimo teniendo en cuenta la información disponible.
+
+Para esto se utiliza el dataframe construido anteriormente y se generarán las variables dummies necesarias para la construcción del modelo.
+
+```{r}
+#Se selecciona solo la clase de tipo SOLO DAÑOS
+df <- df[df$GRAVEDAD == 'SOLO DAÑOS',]
+df$GRAVEDAD <- NULL
+```
+
+```{r}
+df_mes <-  df %>%
+  group_by(PERIODO,MES) %>%
+  summarize(NRO_ACCIDENTES= sum(NRO_ACCIDENTES),Total_festivos = sum(FESTIVO), Total_laborales= sum(LABORAL))
+
+
+```
+
+```{r}
+library(fastDummies)
+
+df_mes <- dummy_cols(df_mes, select_columns = c('MES'))
+df_mes$MES <- NULL
+```
+
+
+```{r}
+df_semana <-  df %>%
+  group_by(PERIODO,SEMANA) %>%
+  summarize(NRO_ACCIDENTES= sum(NRO_ACCIDENTES),Total_festivos = sum(FESTIVO), Total_laborales= sum(LABORAL))
+```
+
+```{r}
+df_semana <- dummy_cols(df_semana, select_columns = c('SEMANA'))
+df_semana$SEMANA <- NULL
+```
+
+
+```{r}
+
+df_mes$Total_festivos <- scale(df_mes$Total_festivos)
+df_mes$Total_laborales <- scale(df_mes$Total_laborales)
+df_mes
+```
+
+```{r}
+df_semana$Total_festivos <- scale(df_semana$Total_festivos)
+df_semana$Total_laborales <- scale(df_semana$Total_laborales)
+df_semana
+```
+
+#MODELACIÓN CON REGRESIÓN LINEAL UTILIZANDO SELECCIÓN DE VARIABLES CON EL METODO STEPWISE PARA LA PERIODICIDAD MENSUAL
+
+```{r}
+# se divide el conjunto de datos en entrenamiento y validación para MES
+train <- df_mes[df_mes$PERIODO < 2018,]
+validation<- df_mes[df_mes$PERIODO == 2018,]
+
+```
+
+```{r}
+# se genera el modelo de regresión linea, y como una variable categorica se puede representar como k-1 variables dummues, se elimina una de cada variable inicial
+modelo_lm <- lm(NRO_ACCIDENTES~.- PERIODO-MES_1,data=train)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+```{r}
+modelo_lm_step<-step(modelo_lm,direction = "backward",trace=FALSE)
+summary(modelo_lm_step)
+```
+
+```{r}
+modelo_lm <- lm(formula(modelo_lm_step),data=train)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,train)
+cat(" MSE_t:",mean((pred-train$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validation)
+cat(" MSE_v:",mean((pred-validation$NRO_ACCIDENTES)^2))
+```
+
+
+
+#MODELACIÓN CON REGRESIÓN LINEAL UTILIZANDO SELECCIÓN DE VARIABLES CON EL METODO STEPWISE PARA LA PERIODICIDAD SEMANAL
+
+
+```{r}
+trains <- df_semana[df_semana$PERIODO < 2018,]
+validations<- df_semana[df_semana$PERIODO == 2018,]
+```
+
+```{r}
+modelo_lm <- lm(NRO_ACCIDENTES~.-PERIODO- SEMANA_01  ,data=trains)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,trains)
+cat(" MSE_t:",mean((pred-trains$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validations)
+cat(" MSE_v:",mean((pred-validations$NRO_ACCIDENTES)^2))
+```
+
+```{r}
+modelo_lm_step<-step(modelo_lm,direction = "backward",trace=FALSE)
+summary(modelo_lm_step)
+```
+
+
+```{r}
+modelo_lm <- lm(formula(modelo_lm_step),data=trains)
+summary(modelo_lm)
+cat(" AIC:",AIC(modelo_lm))
+pred=predict(modelo_lm,trains)
+cat(" MSE_t:",mean((pred-trains$NRO_ACCIDENTES)^2))
+pred=predict(modelo_lm,validations)
+cat(" MSE_v:",mean((pred-validations$NRO_ACCIDENTES)^2))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,12 @@
+name: web_app2
+title: web_app2
+username:
+account: accidentalidad-medellin-analitica-predictiva
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2749515
+bundleId: 3591502
+url: https://accidentalidad-medellin-analitica-predictiva.shinyapps.io/web_app2/
+when: 1599192996.87243
+asMultiple: FALSE
+asStatic: FALSE
